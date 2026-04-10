@@ -1,0 +1,218 @@
+/* Nền động + overlay gradient (glassmorphism) */
+.login-container {
+    position: relative;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: url('https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?q=80&w=2070') no-repeat center center/cover;
+    font-family: 'Segoe UI', sans-serif;
+    overflow: hidden;
+}
+
+.login-container::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(120deg, rgba(255, 176, 64, 0.32), rgba(139, 98, 32, 0.32), rgba(0, 0, 0, 0.35));
+    background-size: 400% 400%;
+    animation: gradientMove 14s ease infinite;
+    pointer-events: none;
+}
+
+@keyframes gradientMove {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+
+/* Khung đăng nhập (glassmorphism + fade-in) */
+.login-box {
+    position: relative;
+    background: rgba(255, 255, 255, 0.22);
+    padding: 40px;
+    border-radius: 28px;
+    width: 380px;
+    text-align: center;
+    box-shadow: 0 20px 45px rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(255, 255, 255, 0.32);
+    backdrop-filter: blur(12px);
+    animation: popIn 0.55s ease;
+}
+
+@keyframes popIn {
+    0% { opacity: 0; transform: translateY(20px) scale(0.98); }
+    100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.coffee-logo {
+    color: #8b6220;
+    font-size: 50px;
+    margin-bottom: 10px;
+}
+
+.login-box h2 {
+    margin: 5px 0;
+    font-size: 26px;
+    color: #222;
+}
+
+.subtitle {
+    color: #666;
+    font-size: 14px;
+    margin-bottom: 30px;
+}
+
+/* Căn chỉnh Icon nằm trong ô Input */
+.input-group {
+    position: relative;
+    margin-bottom: 15px;
+}
+
+.input-group i {
+    position: absolute;
+    left: 18px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #888;
+}
+
+/* Icon mắt ở bên phải */
+.input-group i.fa-eye, .input-group i.fa-eye-slash {
+    left: auto;
+    right: 18px;
+    cursor: pointer;
+}
+
+.input-group input {
+    width: 100%;
+    padding: 14px 50px 14px 50px; /* Thêm padding right cho icon mắt */
+    border: 1px solid #ddd;
+    border-radius: 30px;
+    background-color: rgba(248, 249, 250, 0.85);
+    box-sizing: border-box;
+    font-size: 15px;
+    outline: none;
+    transition: border 0.25s ease, box-shadow 0.25s ease;
+}
+
+.input-group input:focus {
+    border-color: rgba(139, 98, 32, 0.8);
+    box-shadow: 0 0 0 4px rgba(139, 98, 32, 0.18);
+}
+
+/* Ẩn icon ẩn/hiện mật khẩu mặc định của trình duyệt */
+.input-group input[type="password"]::-ms-reveal,
+.input-group input[type="password"]::-ms-clear,
+.input-group input[type="password"]::-webkit-textfield-decoration-container,
+.input-group input[type="password"]::-webkit-textfield-decoration-button {
+    display: none !important;
+    visibility: hidden !important;
+}
+
+/* Nút Login/Sign Up màu nâu */
+.login-btn {
+    width: 100%;
+    padding: 14px;
+    background-color: #8b6220;
+    color: white;
+    border: none;
+    border-radius: 30px;
+    font-weight: bold;
+    font-size: 16px;
+    cursor: pointer;
+    margin-top: 10px;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+
+.login-btn:hover {
+    background-color: #6f4e37;
+    box-shadow: 0 8px 20px rgba(139, 98, 32, 0.38);
+    transform: translateY(-2px);
+}
+
+/* Nút secondary (Back to Login) */
+.secondary-btn {
+    width: 100%;
+    padding: 14px;
+    background-color: rgba(0, 0, 0, 0.06);
+    color: #333;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    border-radius: 30px;
+    font-weight: bold;
+    font-size: 16px;
+    cursor: pointer;
+    margin-top: 10px;
+    transition: 0.3s;
+}
+
+.secondary-btn:hover {
+    background-color: rgba(0, 0, 0, 0.1);
+}
+
+/* Lỗi hiển thị */
+.error-text {
+    color: #c0392b;
+    font-size: 12px;
+    margin-top: 6px;
+    margin-bottom: 0;
+    text-align: left;
+}
+
+/* Password strength meter */
+.password-strength {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 6px;
+}
+
+.password-strength-bar {
+    flex: 1;
+    height: 6px;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+}
+
+.password-strength-label {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.divider {
+    margin: 25px 0;
+    color: #999;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+}
+
+.divider::before, .divider::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: #eee;
+    margin: 0 15px;
+}
+
+/* Nút Google/Facebook */
+.social-login {
+    display: flex;
+    gap: 15px;
+}
+
+.social-btn {
+    flex: 1;
+    padding: 12px;
+    border: 1px solid #ddd;
+    border-radius: 30px;
+    background: white;
+    font-size: 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
