@@ -21,6 +21,18 @@ function formatDateTime(v) {
   return d.toLocaleString('vi-VN');
 }
 
+function isJwtExpired(token) {
+  try {
+    if (!token) return true;
+    const payload = JSON.parse(atob(String(token).split('.')[1] || ''));
+    const exp = Number(payload?.exp || 0);
+    if (!exp) return false;
+    return Date.now() >= exp * 1000;
+  } catch (_err) {
+    return true;
+  }
+}
+
 export default function Account() {
   const navigate = useNavigate();
   const customerToken = localStorage.getItem('customerToken');
@@ -42,12 +54,30 @@ export default function Account() {
   const [transactions, setTransactions] = useState([]);
   const [vouchers, setVouchers] = useState([]);
   const [extraLoading, setExtraLoading] = useState(false);
+  const [invoiceSearch, setInvoiceSearch] = useState('');
+  const [invoiceStatus, setInvoiceStatus] = useState('');
+  const [selectedInvoice, setSelectedInvoice] = useState(null);
+  const [openAccountMenu, setOpenAccountMenu] = useState(false);
+
+  const notify = React.useCallback((text) => {
+    if (!text) return;
+    setMessage(text);
+    window.setTimeout(() => {
+      setMessage('');
+    }, 2200);
+  }, []);
 
   useEffect(() => {
     let mounted = true;
 
     const loadMyProfile = async () => {
       if (!customerToken) return;
+      if (isJwtExpired(customerToken)) {
+        localStorage.removeItem('customerToken');
+        localStorage.removeItem('customerProfile');
+        setMessage('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+        return;
+      }
       try {
         setLoading(true);
         const res = await axios.get('/api/customers/me', {
@@ -65,12 +95,18 @@ export default function Account() {
             email: c.email || '',
             birth_date: c.birth_date || ''
           }));
-          setMessage('Bạn đang đăng nhập tài khoản khách hàng.');
+          // Không hiển thị thông báo "đăng nhập thành công" ở khu vực nội dung
         }
-      } catch (_err) {
+      } catch (err) {
         if (!mounted) return;
-        localStorage.removeItem('customerToken');
-        localStorage.removeItem('customerProfile');
+        const status = err?.response?.status;
+        if (status === 401 || status === 403) {
+          localStorage.removeItem('customerToken');
+          localStorage.removeItem('customerProfile');
+          setMessage('Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.');
+          return;
+        }
+        setMessage(err?.response?.data?.message || 'Không thể tải thông tin tài khoản.');
       } finally {
         if (mounted) setLoading(false);
       }
@@ -118,7 +154,7 @@ export default function Account() {
       if (res.data?.customer) {
         setCustomer((prev) => ({ ...prev, ...res.data.customer }));
       }
-      setMessage(res.data?.message || 'Cập nhật thông tin cá nhân thành công.');
+      notify(res.data?.message || 'Cập nhật thông tin cá nhân thành công.');
     } catch (err) {
       setMessage(err?.response?.data?.message || 'Không thể cập nhật hồ sơ lúc này.');
     } finally {
@@ -152,7 +188,7 @@ export default function Account() {
         },
         { headers: { Authorization: `Bearer ${customerToken}` } }
       );
-      setMessage(res.data?.message || 'Đổi mật khẩu thành công.');
+      notify(res.data?.message || 'Đổi mật khẩu thành công.');
       setPasswordForm({ current: '', next: '', confirm: '' });
     } catch (err) {
       setMessage(err?.response?.data?.message || 'Không thể đổi mật khẩu lúc này.');
@@ -167,7 +203,7 @@ export default function Account() {
       setMessage('Vui lòng nhập nội dung phản hồi.');
       return;
     }
-    setMessage('Đã gửi phản hồi. Đội ngũ CSKH sẽ liên hệ sớm nhất.');
+    notify('Đã gửi phản hồi. Đội ngũ CSKH sẽ liên hệ sớm nhất.');
     setFeedback('');
   };
 
@@ -175,8 +211,10 @@ export default function Account() {
     let mounted = true;
 
     const loadExtraData = async () => {
-      if (!customerToken) {
+      if (!customerToken || isJwtExpired(customerToken)) {
         if (!mounted) return;
+        localStorage.removeItem('customerToken');
+        localStorage.removeItem('customerProfile');
         setTransactions([]);
         setVouchers([]);
         return;
@@ -212,6 +250,17 @@ export default function Account() {
   const points = Number(customer?.points || 0);
   const progress = Math.min(100, Math.round((points / tier.nextMilestone) * 100));
   const transactionRows = transactions;
+  const filteredInvoices = useMemo(() => {
+    const keyword = String(invoiceSearch || '').trim().toLowerCase();
+    return (transactionRows || []).filter((tx) => {
+      const matchKeyword = !keyword
+        || String(tx.id || '').toLowerCase().includes(keyword)
+        || String(tx.store || '').toLowerCase().includes(keyword)
+        || (tx.items || []).some((it) => String(it || '').toLowerCase().includes(keyword));
+      const matchStatus = !invoiceStatus || String(tx.status || '') === invoiceStatus;
+      return matchKeyword && matchStatus;
+    });
+  }, [transactionRows, invoiceSearch, invoiceStatus]);
   const voucherRows = vouchers;
   const activeVouchers = useMemo(() => voucherRows.filter((v) => v.status === 'active'), [voucherRows]);
   const usedOrExpired = useMemo(() => voucherRows.filter((v) => v.status !== 'active'), [voucherRows]);
@@ -219,7 +268,7 @@ export default function Account() {
   const tabs = [
     { id: 'profile', label: 'Thông tin cá nhân', icon: 'badge' },
     { id: 'tier', label: 'Điểm & hạng', icon: 'workspace_premium' },
-    { id: 'transactions', label: 'Giao dịch tại quầy', icon: 'receipt_long' },
+    { id: 'transactions', label: 'Hóa đơn mua hàng', icon: 'receipt_long' },
     { id: 'vouchers', label: 'Voucher của tôi', icon: 'local_activity' },
     { id: 'security', label: 'Bảo mật', icon: 'shield_lock' },
     { id: 'support', label: 'Hỗ trợ', icon: 'support_agent' }
@@ -244,24 +293,68 @@ export default function Account() {
             <Link to="/news" className="hover:text-[#7a4a27]">Tin tức</Link>
             <Link to="/account" className="hover:text-[#7a4a27]">Tài khoản</Link>
           </nav>
-          <div className="flex items-center gap-3">
-            <Link className="rounded-full border border-[#d5b899] px-4 py-2 text-sm font-semibold hover:bg-[#f7eadb]" to="/customer/login">
-              Đăng nhập
-            </Link>
-            <Link className="rounded-full bg-[#7a4a27] px-4 py-2 text-sm font-semibold text-white hover:bg-[#5e3519]" to="/customer/register">
-              Đăng ký
-            </Link>
+          <div className="flex items-center gap-3 relative">
+            {!customerToken ? (
+              <>
+                <Link className="rounded-full border border-[#d5b899] px-4 py-2 text-sm font-semibold hover:bg-[#f7eadb]" to="/customer/login">
+                  Đăng nhập
+                </Link>
+                <Link className="rounded-full bg-[#7a4a27] px-4 py-2 text-sm font-semibold text-white hover:bg-[#5e3519]" to="/customer/register">
+                  Đăng ký
+                </Link>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setOpenAccountMenu((v) => !v)}
+                  className="flex items-center gap-2 px-1 py-1"
+                >
+                  <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#e7ebf0] text-[#5a6168] text-xs font-semibold">
+                    {(customer?.full_name || profileForm.full_name || 'U').slice(0, 1).toUpperCase()}
+                  </span>
+                  <span className="text-[16px] font-medium text-[#303742] leading-none">
+                    {String(customer?.full_name || profileForm.full_name || 'Tài khoản').split(' ').slice(-2).join(' ')}
+                  </span>
+                  <span className="material-symbols-outlined text-[18px] text-[#6b7280]">expand_more</span>
+                </button>
+
+                {openAccountMenu && (
+                  <div className="absolute right-0 top-[56px] z-30 w-52 rounded-xl border border-[#eadfd4] bg-white shadow-lg overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOpenAccountMenu(false);
+                        navigate('/account');
+                      }}
+                      className="w-full text-left px-4 py-3 text-sm font-medium text-[#2f2117] hover:bg-[#faf5ef]"
+                    >
+                      Tài khoản của tôi
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOpenAccountMenu(false);
+                        handleLogout();
+                      }}
+                      className="w-full text-left px-4 py-3 text-sm font-medium text-[#8b2b2b] hover:bg-[#fff1f1] border-t border-[#f2e5e5]"
+                    >
+                      Đăng xuất
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </div>
       </header>
 
       <section className="mx-auto w-full max-w-6xl px-4 py-8 md:px-6">
         {message && (
-          <div className="mb-4 rounded-xl border border-[#f0d5bd] bg-[#fff7ef] px-4 py-3 text-sm text-[#7a4a27]">
+          <div className="fixed right-6 top-20 z-[60] rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700 shadow-lg animate-[fadeIn_0.2s_ease]">
             {message}
           </div>
         )}
-
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
           <aside className="lg:col-span-3">
             <div className="rounded-2xl border border-[#ead9c7] bg-white shadow-sm">
@@ -374,11 +467,14 @@ export default function Account() {
 
             {activeTab === 'transactions' && (
               <section className="space-y-5">
-                <h3 className="text-2xl font-bold text-[#2a2018]">Giao dịch tại quầy</h3>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <h3 className="text-2xl font-bold text-[#2a2018]">Hóa đơn mua hàng</h3>
+                  <div className="text-xs text-[#7a7a7a]">Tổng: <b>{filteredInvoices.length}</b> hóa đơn</div>
+                </div>
 
                 {!customerToken ? (
                   <div className="mt-4 rounded-lg border border-[#efefef] bg-[#fafafa] p-4 text-sm text-[#666]">
-                    Vui lòng đăng nhập tài khoản thành viên để xem lịch sử giao dịch thật từ hệ thống.
+                    Vui lòng đăng nhập tài khoản thành viên để xem hóa đơn thật từ hệ thống.
                   </div>
                 ) : extraLoading ? (
                   <div className="mt-4 space-y-3">
@@ -388,27 +484,86 @@ export default function Account() {
                   </div>
                 ) : transactionRows.length === 0 ? (
                   <div className="mt-4 rounded-lg border border-[#efefef] bg-[#fafafa] p-4 text-sm text-[#666]">
-                    Chưa có giao dịch tại quầy nào được ghi nhận cho tài khoản này.
+                    Chưa có hóa đơn mua hàng nào được ghi nhận cho tài khoản này.
                   </div>
                 ) : (
-                  <div className="mt-4 space-y-3">
-                    {transactionRows.map((tx) => (
-                      <article key={tx.id} className="rounded-lg border border-[#efefef] bg-[#fafafa] p-4">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <p className="text-sm font-bold text-[#222]">{tx.id}</p>
-                          <p className="text-xs text-[#777]">{formatDateTime(tx.date)}</p>
+                  <>
+                    <div className="rounded-xl border border-[#efe4d9] bg-[#fffaf6] p-3 grid grid-cols-1 lg:grid-cols-[1.8fr_1fr_0.9fr] gap-3 items-center">
+                      <input
+                        className="min-w-0 w-full rounded-lg border border-[#ece0d5] bg-white px-3 py-2 text-sm"
+                        placeholder="Tìm mã hóa đơn / sản phẩm / cửa hàng"
+                        value={invoiceSearch}
+                        onChange={(e) => setInvoiceSearch(e.target.value)}
+                      />
+                      <select
+                        className="w-full rounded-lg border border-[#ece0d5] bg-white px-3 py-2 text-sm"
+                        value={invoiceStatus}
+                        onChange={(e) => setInvoiceStatus(e.target.value)}
+                      >
+                        <option value="">Tất cả trạng thái</option>
+                        <option value="paid">Đã thanh toán</option>
+                        <option value="pending">Chờ thanh toán</option>
+                        <option value="cancelled">Đã hủy</option>
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setInvoiceSearch('');
+                          setInvoiceStatus('');
+                        }}
+                        className="rounded-lg border border-[#e2d3c4] bg-white px-3 py-2 text-sm font-semibold text-[#7a4a27]"
+                      >
+                        Xóa bộ lọc
+                      </button>
+                    </div>
+
+                    <div className="mt-4 overflow-hidden rounded-xl border border-[#ebe1d7] bg-white">
+                      <table className="w-full text-sm">
+                        <thead className="bg-[#faf7f3]">
+                          <tr className="text-left text-[#7b6a59]">
+                            <th className="px-4 py-3 font-semibold">Mã đơn hàng</th>
+                            <th className="px-4 py-3 font-semibold">Ngày đặt hàng</th>
+                            <th className="px-4 py-3 font-semibold">Mua tại</th>
+                            <th className="px-4 py-3 font-semibold">Tổng tiền</th>
+                            <th className="px-4 py-3 font-semibold">Điểm cộng</th>
+                            <th className="px-4 py-3 font-semibold">Trạng thái</th>
+                            <th className="px-4 py-3 font-semibold text-right">Thao tác</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredInvoices.map((tx) => (
+                            <tr key={tx.id} className="border-t border-[#f0e7dd] text-[#3a2d22]">
+                              <td className="px-4 py-3 font-semibold">{tx.id}</td>
+                              <td className="px-4 py-3 text-[#6f6257]">{formatDateTime(tx.date)}</td>
+                              <td className="px-4 py-3">{tx.store}</td>
+                              <td className="px-4 py-3 font-semibold">{formatVnd(tx.total)}</td>
+                              <td className="px-4 py-3">+{tx.points}</td>
+                              <td className="px-4 py-3">
+                                <span className={`px-2 py-1 rounded-md text-[11px] font-semibold ${tx.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : tx.status === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>
+                                  {tx.status === 'paid' ? 'Hoàn thành' : tx.status === 'pending' ? 'Chờ thanh toán' : 'Đã hủy'}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 text-right">
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedInvoice(tx)}
+                                  className="rounded-lg border border-[#e2d3c4] px-3 py-1.5 text-xs font-semibold text-[#6b4125] hover:bg-[#f8f1ea]"
+                                >
+                                  Xem chi tiết
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+
+                      {!filteredInvoices.length && (
+                        <div className="border-t border-[#f0e7dd] p-4 text-sm text-[#666]">
+                          Không tìm thấy hóa đơn phù hợp với điều kiện lọc.
                         </div>
-                        <p className="mt-1 text-sm text-[#555]">Cửa hàng: {tx.store}</p>
-                        <div className="mt-2 flex flex-wrap gap-4 text-sm text-[#444]">
-                          <p><span className="font-semibold">Tổng tiền:</span> {formatVnd(tx.total)}</p>
-                          <p><span className="font-semibold">Điểm cộng:</span> +{tx.points}</p>
-                        </div>
-                        <ul className="mt-2 list-disc pl-5 text-sm text-[#555]">
-                          {(tx.items || []).map((i) => <li key={`${tx.id}-${i}`}>{i}</li>)}
-                        </ul>
-                      </article>
-                    ))}
-                  </div>
+                      )}
+                    </div>
+                  </>
                 )}
               </section>
             )}
@@ -517,6 +672,44 @@ export default function Account() {
           </main>
         </div>
       </section>
+
+      {selectedInvoice && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="w-full max-w-2xl rounded-2xl border border-[#e8d7c7] bg-white shadow-2xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-[#f0e3d6] bg-[#fff7ef] flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold text-[#8b6b54]">Chi tiết hóa đơn</p>
+                <h4 className="text-lg font-extrabold text-[#2a2018]">{selectedInvoice.id}</h4>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedInvoice(null)}
+                className="rounded-lg border border-[#e5d5c5] px-3 py-1.5 text-sm text-[#6b4d37]"
+              >
+                Đóng
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                <p><span className="font-semibold">Ngày mua:</span> {formatDateTime(selectedInvoice.date)}</p>
+                <p><span className="font-semibold">Cửa hàng:</span> {selectedInvoice.store}</p>
+                <p><span className="font-semibold">Tổng tiền:</span> {formatVnd(selectedInvoice.total)}</p>
+                <p><span className="font-semibold">Điểm tích lũy:</span> +{selectedInvoice.points}</p>
+              </div>
+
+              <div className="rounded-xl border border-[#efe3d7] bg-[#fffcf8] p-4">
+                <p className="text-sm font-bold text-[#2a2018] mb-2">Sản phẩm trong hóa đơn</p>
+                <ul className="list-disc pl-5 space-y-1 text-sm text-[#5b5b5b]">
+                  {(selectedInvoice.items || []).map((it) => (
+                    <li key={`${selectedInvoice.id}-${it}`}>{it}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

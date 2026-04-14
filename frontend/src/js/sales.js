@@ -86,8 +86,7 @@ function summarizeOptions(modal) {
     size ? `Size ${size}` : null,
     ice ? `Đá: ${ice}` : null,
     sugar ? `Đường: ${sugar}` : null,
-    toppingLabels.length ? `Topping: ${toppingLabels.join(', ')}` : null,
-    modal.usePoints ? 'Tích điểm' : null
+    toppingLabels.length ? `Topping: ${toppingLabels.join(', ')}` : null
   ].filter(Boolean);
 
   return parts.join(' • ');
@@ -367,6 +366,8 @@ function Sales() {
   const [query, setQuery] = useState('');
 
   const [customerMode, setCustomerMode] = useState('walk_in'); // walk_in | table
+  const [useLoyalty, setUseLoyalty] = useState(false);
+  const [loyaltyPhone, setLoyaltyPhone] = useState('');
 
   const [cart, setCart] = useState(() => new Map()); // key -> { key, product, qty, options, unitPrice }
   const [submitting, setSubmitting] = useState(false);
@@ -477,9 +478,7 @@ function Sales() {
       ice: canCustomizeDrink ? 'normal' : 'none',
       sugar: canCustomizeDrink ? 'less' : 'none',
       toppings: [],
-      supportsDrinkModifiers: canCustomizeDrink,
-      usePoints: false,
-      phone: ''
+      supportsDrinkModifiers: canCustomizeDrink
     }));
     setIsModalOpen(true);
   };
@@ -491,10 +490,6 @@ function Sales() {
 
   const addConfiguredItemToCart = () => {
     if (!selectedProduct) return;
-    if (modal.usePoints && !String(modal.phone || '').trim()) {
-      toast.error('Vui lòng nhập số điện thoại khi tích điểm.');
-      return;
-    }
 
     const canCustomizeDrink = supportsDrinkModifiers(selectedProduct);
     const normalizedModal = {
@@ -548,19 +543,37 @@ function Sales() {
   const startCheckout = () => {
     if (cartItems.length === 0 || submitting) return;
 
-    // Theo yêu cầu: không hiển thị modal "Xác nhận thanh toán" trung gian,
-    // mà mở thẳng modal "Chi tiết hóa đơn" ngay.
+    // Chỉ mở màn hình xem trước hóa đơn, CHƯA ghi đơn vào DB.
     setPaymentMethod('cash');
-    (async () => {
-      const pendingInvoice = await submitOrder({
-        desiredStatus: 'pending',
-        selectedPaymentMethod: 'cash'
-      });
-      if (!pendingInvoice) return;
-
-      const detail = await fetchInvoiceDetail(pendingInvoice.orderId);
-      setInvoiceModal(detail || { ...pendingInvoice, status: 'pending' });
-    })();
+    setInvoiceModal({
+      orderId: null,
+      code: 'CHỜ XÁC NHẬN',
+      createdAt: new Date().toISOString(),
+      status: 'pending',
+      tableLabel: customerMode === 'table' ? 'Tại bàn' : 'Khách lẻ / Mang đi',
+      paymentMethod: 'Tiền mặt',
+      items: cartItems.map((it) => ({
+        name: it?.product?.product_name,
+        image_url: it?.product?.image_url || null,
+        qty: Number(it?.qty || 0),
+        unitPrice: Number(it?.unitPrice || 0),
+        lineTotal: Number(it?.unitPrice || 0) * Number(it?.qty || 0),
+        optionsText: summarizeOptions(it.options || {}),
+        isCake: it?.options?.supportsDrinkModifiers === false,
+        size: it?.options?.supportsDrinkModifiers !== false ? (it?.options?.size || 'S') : null,
+        iceLabel: it?.options?.supportsDrinkModifiers !== false ? (ICE_OPTIONS.find((x) => x.id === it?.options?.ice)?.label || '') : '',
+        sugarLabel: it?.options?.supportsDrinkModifiers !== false ? (SUGAR_OPTIONS.find((x) => x.id === it?.options?.sugar)?.label || '') : '',
+        toppingText: it?.options?.supportsDrinkModifiers !== false
+          ? (it?.options?.toppings || [])
+              .map((id) => TOPPING_OPTIONS.find((t) => t.id === id)?.label)
+              .filter(Boolean)
+              .join(', ')
+          : ''
+      })),
+      subtotal,
+      tax,
+      total
+    });
   };
 
   const startNewOrder = () => {
@@ -568,6 +581,9 @@ function Sales() {
     setTransferOrder(null);
     setIsTransferModalOpen(false);
     setCustomerMode('walk_in');
+    setUseLoyalty(false);
+    setLoyaltyPhone('');
+    setPaymentMethod('cash');
   };
 
   const submitOrder = async ({ desiredStatus, selectedPaymentMethod }) => {
@@ -608,15 +624,8 @@ function Sales() {
           toppingText
         };
       });
-      const loyaltyItems = cartItems.filter((it) => Boolean(it?.options?.usePoints));
-      const loyaltyPhones = [...new Set(loyaltyItems.map((it) => String(it?.options?.phone || '').trim()).filter(Boolean))];
-      if (loyaltyItems.length > 0 && loyaltyPhones.length === 0) {
-        setErrorMessage('Đơn hàng tích điểm cần số điện thoại hợp lệ.');
-        setSubmitting(false);
-        return null;
-      }
-      if (loyaltyPhones.length > 1) {
-        setErrorMessage('Một đơn hàng chỉ hỗ trợ 1 số điện thoại tích điểm.');
+      if (useLoyalty && !String(loyaltyPhone || '').trim()) {
+        setErrorMessage('Vui lòng nhập số điện thoại tích điểm ở phần chi tiết đơn hàng.');
         setSubmitting(false);
         return null;
       }
@@ -635,10 +644,10 @@ function Sales() {
           price_at_sale: Number(it.unitPrice || 0),
           size_label: it?.options?.supportsDrinkModifiers !== false ? (it?.options?.size || 'S') : 'DEFAULT'
         })),
-        loyalty: loyaltyItems.length
+        loyalty: useLoyalty
           ? {
               use_points: true,
-              phone: loyaltyPhones[0],
+              phone: String(loyaltyPhone || '').trim(),
               full_name: 'Khách POS'
             }
           : { use_points: false }
@@ -808,6 +817,22 @@ function Sales() {
   };
 
   const confirmInvoicePaid = async ({ printAfter } = { printAfter: false }) => {
+    const isDraftInvoice = !Number.isFinite(Number(invoiceModal?.orderId)) || Number(invoiceModal?.orderId) <= 0;
+
+    if (isDraftInvoice) {
+      const created = await submitOrder({
+        desiredStatus: 'paid',
+        selectedPaymentMethod: paymentMethod === 'transfer' ? 'transfer' : 'cash'
+      });
+      if (!created) return;
+
+      clearCart();
+      const detail = await fetchInvoiceDetail(created.orderId);
+      setInvoiceModal(detail || { ...created, status: 'paid' });
+      setShouldPrintAfterUpdate(Boolean(printAfter));
+      return;
+    }
+
     const token = localStorage.getItem('token');
     if (!token) {
       handleLogout();
@@ -1076,7 +1101,30 @@ function Sales() {
                   </div>
                 </div>
 
-                <div className="mt-5 flex items-center gap-3">
+                <div className="mt-5 rounded-2xl border border-orange-100 bg-white p-3 space-y-3 text-left">
+                  <label className="flex items-center gap-3 select-none">
+                    <input
+                      type="checkbox"
+                      className="size-4 accent-[#b87414]"
+                      checked={useLoyalty}
+                      onChange={(e) => setUseLoyalty(e.target.checked)}
+                    />
+                    <span className="text-sm font-semibold text-slate-700">Tích điểm</span>
+                  </label>
+                  {useLoyalty && (
+                    <div>
+                      <label className="text-xs font-semibold text-slate-600">Số điện thoại tích điểm</label>
+                      <input
+                        className="mt-2 w-full border border-orange-100 rounded-xl px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-[#b87414]"
+                        placeholder="090..."
+                        value={loyaltyPhone}
+                        onChange={(e) => setLoyaltyPhone(e.target.value)}
+                      />
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-3 flex items-center gap-3">
                   <button
                     onClick={clearCart}
                     disabled={cartItems.length === 0 || submitting}
@@ -1169,6 +1217,11 @@ function Sales() {
 
                 {String(invoiceModal?.status) === 'pending' ? (
                   <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                    {!invoiceModal?.orderId && (
+                      <p className="text-[11px] text-amber-700 font-semibold mb-2">
+                        Đây là hóa đơn tạm để xác nhận món. Nhấn dấu X sẽ thoát mà không lưu đơn.
+                      </p>
+                    )}
                     <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-2">Phương thức thanh toán</p>
                     <div className="grid grid-cols-2 gap-2">
                       <button
@@ -1452,39 +1505,17 @@ function Sales() {
                 </div>
               )}
 
-              {/* Table + points */}
+              {/* Note */}
               <div>
                 <p className="text-xs font-extrabold tracking-wide text-slate-700 flex items-center gap-2">
                   <span className="material-symbols-outlined text-[18px] text-[#b87414]">receipt_long</span>
-                  THÔNG TIN ĐƠN
+                  THÔNG TIN MÓN
                 </p>
                 <div className="mt-3 grid grid-cols-1 gap-3">
                   <div className="rounded-xl border border-orange-100 bg-orange-50/40 px-3 py-2 text-left">
-                    <p className="text-xs font-semibold text-slate-700">Mã order tự động</p>
-                    <p className="mt-1 text-[11px] text-slate-500">Khi thêm món cho khách dùng tại bàn, không cần chọn bàn. Hệ thống tự tạo mã order để theo dõi.</p>
+                    <p className="text-xs font-semibold text-slate-700">Tùy chỉnh món</p>
+                    <p className="mt-1 text-[11px] text-slate-500">Thiết lập size, đá, đường, topping tại đây. Tích điểm được nhập ở khung Chi tiết đơn hàng.</p>
                   </div>
-
-                  <label className="flex items-center gap-3 select-none">
-                    <input
-                      type="checkbox"
-                      className="size-4 accent-[#b87414]"
-                      checked={modal.usePoints}
-                      onChange={(e) => setModal((m) => ({ ...m, usePoints: e.target.checked }))}
-                    />
-                    <span className="text-sm font-semibold text-slate-700">Tích điểm</span>
-                  </label>
-
-                  {modal.usePoints && (
-                    <div>
-                      <label className="text-xs font-semibold text-slate-600">Số điện thoại tích điểm</label>
-                      <input
-                        className="mt-2 w-full border border-orange-100 rounded-xl px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-[#b87414]"
-                        placeholder="090..."
-                        value={modal.phone}
-                        onChange={(e) => setModal((m) => ({ ...m, phone: e.target.value }))}
-                      />
-                    </div>
-                  )}
                 </div>
               </div>
 

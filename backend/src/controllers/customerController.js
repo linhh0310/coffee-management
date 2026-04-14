@@ -19,11 +19,22 @@ const resetOtpStore = new Map();
 
 async function ensureCustomerAuthColumns() {
   if (authColumnsEnsured) return;
-  try {
-    await db.query('ALTER TABLE customers ADD COLUMN IF NOT EXISTS password VARCHAR(255) NULL');
-  } catch (_err) {
-    // Ignore so app can continue even if column already exists or DB doesn't support IF NOT EXISTS
+
+  const [cols] = await db.query(
+    `
+      SELECT COLUMN_NAME
+      FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'customers'
+        AND COLUMN_NAME = 'password'
+      LIMIT 1
+    `
+  );
+
+  if (!cols.length) {
+    await db.query('ALTER TABLE customers ADD COLUMN password VARCHAR(255) NULL');
   }
+
   authColumnsEnsured = true;
 }
 
@@ -91,22 +102,35 @@ exports.registerCustomer = async (req, res) => {
 
 exports.loginCustomer = async (req, res) => {
   const phone = normalizePhone(req.body?.phone);
+  const email = String(req.body?.email || '').trim().toLowerCase();
   const password = String(req.body?.password || '');
 
-  if (!phone || !password) return res.status(400).json({ message: 'Thiếu số điện thoại hoặc mật khẩu' });
+  if ((!phone && !email) || !password) {
+    return res.status(400).json({ message: 'Thiếu số điện thoại/email hoặc mật khẩu' });
+  }
 
   try {
     await ensureCustomerAuthColumns();
 
-    const [rows] = await db.query(
-      `
-      SELECT customer_id, full_name, phone, email, password, points, tier, status
-      FROM customers
-      WHERE REPLACE(REPLACE(REPLACE(phone, ' ', ''), '.', ''), '-', '') = ?
-      LIMIT 1
-      `,
-      [phone]
-    );
+    const [rows] = email
+      ? await db.query(
+          `
+          SELECT customer_id, full_name, phone, email, password, points, tier, status
+          FROM customers
+          WHERE LOWER(COALESCE(email, '')) = ?
+          LIMIT 1
+          `,
+          [email]
+        )
+      : await db.query(
+          `
+          SELECT customer_id, full_name, phone, email, password, points, tier, status
+          FROM customers
+          WHERE REPLACE(REPLACE(REPLACE(phone, ' ', ''), '.', ''), '-', '') = ?
+          LIMIT 1
+          `,
+          [phone]
+        );
 
     if (!rows.length) return res.status(401).json({ message: 'Tài khoản không tồn tại' });
 

@@ -167,11 +167,12 @@
   }
 
   .admin-header {
-    @apply sticky top-0 z-10 flex items-center justify-between border-b px-8;
+    @apply sticky top-0 z-50 flex items-center justify-between border-b px-8;
     height: 72px;
     border-color: #ead9c7;
     background: rgba(255, 250, 244, 0.92);
     backdrop-filter: blur(8px);
+    isolation: isolate;
   }
 
   .admin-page {

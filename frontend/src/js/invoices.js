@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import Sidebar from '../components/Sidebar';
 
 function formatVnd(value) {
@@ -32,6 +33,10 @@ export default function Invoices() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState('');
   const [invoiceDetail, setInvoiceDetail] = useState(null);
+  const [savingId, setSavingId] = useState(null);
+
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deletingInvoiceId, setDeletingInvoiceId] = useState(null);
 
   const handleLogout = React.useCallback(() => {
     localStorage.removeItem('token');
@@ -128,6 +133,62 @@ export default function Invoices() {
     setDetailOpen(false);
     setInvoiceDetail(null);
     setDetailError('');
+  };
+
+  const updateOrderStatus = async (orderId, status) => {
+    const token = localStorage.getItem('token');
+    if (!token) return handleLogout();
+
+    try {
+      setSavingId(orderId);
+      await axios.patch(
+        `/api/orders/invoices/${orderId}/status`,
+        { status },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      toast.success('Cập nhật trạng thái đơn hàng thành công');
+      fetchData(pagination.page || 1);
+    } catch (err) {
+      const code = err?.response?.status;
+      if (code === 401 || code === 403) return handleLogout();
+      toast.error(err?.response?.data?.message || 'Không thể cập nhật trạng thái đơn hàng');
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  const openDeleteModal = (orderId) => {
+    setDeletingInvoiceId(orderId);
+    setDeleteModalOpen(true);
+  };
+
+  const closeDeleteModal = () => {
+    if (savingId) return;
+    setDeleteModalOpen(false);
+    setDeletingInvoiceId(null);
+  };
+
+  const confirmDeleteInvoice = async () => {
+    if (!deletingInvoiceId) return;
+
+    const token = localStorage.getItem('token');
+    if (!token) return handleLogout();
+
+    try {
+      setSavingId(deletingInvoiceId);
+      await axios.delete(`/api/orders/invoices/${deletingInvoiceId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      toast.success('Xóa hóa đơn thành công');
+      closeDeleteModal();
+      fetchData(pagination.page || 1);
+    } catch (err) {
+      const code = err?.response?.status;
+      if (code === 401 || code === 403) return handleLogout();
+      toast.error(err?.response?.data?.message || 'Không thể xóa hóa đơn');
+    } finally {
+      setSavingId(null);
+    }
   };
 
   return (
@@ -251,13 +312,35 @@ export default function Invoices() {
                       </td>
                       <td className="px-4 py-3 text-sm text-slate-700">{r.payment_text}</td>
                       <td className="px-4 py-3 text-sm text-slate-500">
-                        <button
-                          type="button"
-                          onClick={() => openInvoiceDetail(r.id)}
-                          className="px-3 py-1.5 rounded-lg border border-orange-200 text-[#b87414] font-semibold hover:bg-orange-50"
-                        >
-                          Xem chi tiết
-                        </button>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <button
+                            type="button"
+                            onClick={() => openInvoiceDetail(r.id)}
+                            className="px-3 py-1.5 rounded-lg border border-orange-200 text-[#b87414] font-semibold hover:bg-orange-50"
+                          >
+                            Xem chi tiết
+                          </button>
+
+                          <select
+                            value={r.status}
+                            disabled={savingId === r.id}
+                            onChange={(e) => updateOrderStatus(r.id, e.target.value)}
+                            className="px-2 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-700"
+                          >
+                            <option value="pending">Chờ thanh toán</option>
+                            <option value="paid">Đã thanh toán</option>
+                            <option value="cancelled">Đã hủy</option>
+                          </select>
+
+                          <button
+                            type="button"
+                            disabled={savingId === r.id}
+                            onClick={() => openDeleteModal(r.id)}
+                            className="px-3 py-1.5 rounded-lg border border-red-200 text-red-700 font-semibold hover:bg-red-50 disabled:opacity-50"
+                          >
+                            Xóa
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -306,6 +389,36 @@ export default function Invoices() {
           {!loading && errorMessage && <div className="text-red-600">{errorMessage}</div>}
         </div>
       </main>
+
+      {deleteModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-[1px] flex items-center justify-center p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white border border-slate-200 shadow-2xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-200">
+              <h3 className="text-lg font-extrabold text-slate-900">Xác nhận xóa hóa đơn</h3>
+              <p className="text-sm text-slate-600 mt-1">Bạn có chắc chắn muốn xóa hóa đơn không?</p>
+            </div>
+
+            <div className="px-5 py-4 bg-slate-50 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={closeDeleteModal}
+                disabled={!!savingId}
+                className="px-4 py-2 rounded-xl border border-slate-300 text-slate-700 font-semibold hover:bg-white disabled:opacity-50"
+              >
+                Không
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteInvoice}
+                disabled={!!savingId}
+                className="px-4 py-2 rounded-xl bg-red-600 text-white font-semibold hover:bg-red-700 disabled:opacity-50"
+              >
+                {savingId ? 'Đang xóa...' : 'Có'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {detailOpen && (
         <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[1px] flex items-center justify-center p-4">

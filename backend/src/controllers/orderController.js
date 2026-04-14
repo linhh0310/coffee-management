@@ -138,11 +138,13 @@ const getRecentOrders = async (req, res) => {
 const getAnalytics = async (req, res) => {
   const period = String(req.query.period || 'day').toLowerCase();
   const configMap = {
-    day: { label: 'day', mysqlInterval: '10 DAY', trendFormat: '%d/%m' },
-    week: { label: 'week', mysqlInterval: '8 WEEK', trendFormat: '%u/%Y' },
-    month: { label: 'month', mysqlInterval: '12 MONTH', trendFormat: '%m/%Y' }
+    day: { label: 'day', mysqlInterval: '7 DAY', trendFormat: '%d/%m', points: 7 },
+    week: { label: 'week', mysqlInterval: '7 WEEK', trendFormat: '%u/%Y', points: 7 },
+    month: { label: 'month', mysqlInterval: '7 MONTH', trendFormat: '%m/%Y', points: 7 }
   };
   const cfg = configMap[period] || configMap.day;
+  const createdAtLocalExpr = `CONVERT_TZ(created_at, '+00:00', '+07:00')`;
+  const nowLocalExpr = `CONVERT_TZ(UTC_TIMESTAMP(), '+00:00', '+07:00')`;
 
   try {
     const [overviewRows] = await db.query(
@@ -160,34 +162,134 @@ const getAnalytics = async (req, res) => {
             0
           ) AS customerCount
         FROM orders
-        WHERE created_at >= NOW() - INTERVAL ${cfg.mysqlInterval}
+        WHERE ${createdAtLocalExpr} >= ${nowLocalExpr} - INTERVAL ${cfg.mysqlInterval}
       `
     );
 
-    const [trendRows] = await db.query(
-      `
-        SELECT
-          DATE_FORMAT(created_at, '${cfg.trendFormat}') AS periodLabel,
-          COALESCE(SUM(CASE WHEN status = 'paid' THEN final_amount ELSE 0 END), 0) AS revenue
-        FROM orders
-        WHERE created_at >= NOW() - INTERVAL ${cfg.mysqlInterval}
-        GROUP BY periodLabel
-        ORDER BY MIN(created_at)
-      `
+    let trendRows = [];
+    if (cfg.label === 'day') {
+      [trendRows] = await db.query(
+        `
+          SELECT
+            DATE_FORMAT(DATE(${createdAtLocalExpr}), '%Y-%m-%d') AS periodKey,
+            COALESCE(SUM(final_amount), 0) AS revenue,
+            COUNT(*) AS orders
+          FROM orders
+          WHERE status = 'paid'
+            AND ${createdAtLocalExpr} >= ${nowLocalExpr} - INTERVAL ${cfg.mysqlInterval}
+          GROUP BY DATE_FORMAT(DATE(${createdAtLocalExpr}), '%Y-%m-%d')
+          ORDER BY periodKey
+        `
+      );
+    } else if (cfg.label === 'week') {
+      [trendRows] = await db.query(
+        `
+          SELECT
+            DATE_FORMAT(DATE_SUB(DATE(${createdAtLocalExpr}), INTERVAL WEEKDAY(${createdAtLocalExpr}) DAY), '%Y-%m-%d') AS periodKey,
+            COALESCE(SUM(final_amount), 0) AS revenue,
+            COUNT(*) AS orders
+          FROM orders
+          WHERE status = 'paid'
+            AND ${createdAtLocalExpr} >= ${nowLocalExpr} - INTERVAL ${cfg.mysqlInterval}
+          GROUP BY DATE_FORMAT(DATE_SUB(DATE(${createdAtLocalExpr}), INTERVAL WEEKDAY(${createdAtLocalExpr}) DAY), '%Y-%m-%d')
+          ORDER BY periodKey
+        `
+      );
+    } else {
+      [trendRows] = await db.query(
+        `
+          SELECT
+            DATE_FORMAT(${createdAtLocalExpr}, '%Y-%m-01') AS periodKey,
+            COALESCE(SUM(final_amount), 0) AS revenue,
+            COUNT(*) AS orders
+          FROM orders
+          WHERE status = 'paid'
+            AND ${createdAtLocalExpr} >= ${nowLocalExpr} - INTERVAL ${cfg.mysqlInterval}
+          GROUP BY DATE_FORMAT(${createdAtLocalExpr}, '%Y-%m-01')
+          ORDER BY periodKey
+        `
+      );
+    }
+
+    const [[serverNowRow]] = await db.query(
+      `SELECT DATE_FORMAT(DATE(${nowLocalExpr}), '%Y-%m-%d') AS todayKey`
     );
+    const todayKey = String(serverNowRow?.todayKey || '').trim();
+    const [y, m, d] = todayKey.split('-').map((x) => Number(x));
+    const baseDate = (Number.isFinite(y) && Number.isFinite(m) && Number.isFinite(d))
+      ? new Date(y, m - 1, d)
+      : new Date();
+
+    const expectedBuckets = [];
+
+    const makeKey = (dt) => {
+      const yyyy = dt.getFullYear();
+      const mm = String(dt.getMonth() + 1).padStart(2, '0');
+      const dd = String(dt.getDate()).padStart(2, '0');
+      return `${yyyy}-${mm}-${dd}`;
+    };
+
+    if (cfg.label === 'day') {
+      for (let i = cfg.points - 1; i >= 0; i -= 1) {
+        const cur = new Date(baseDate);
+        cur.setDate(baseDate.getDate() - i);
+        const key = makeKey(cur);
+        const dd = String(cur.getDate()).padStart(2, '0');
+        const mm = String(cur.getMonth() + 1).padStart(2, '0');
+        expectedBuckets.push({ key, label: `${dd}/${mm}` });
+      }
+    } else if (cfg.label === 'week') {
+      const anchor = new Date(baseDate);
+      const anchorDay = anchor.getDay();
+      const anchorDiff = anchorDay === 0 ? 6 : anchorDay - 1;
+      anchor.setDate(anchor.getDate() - anchorDiff);
+
+      for (let i = cfg.points - 1; i >= 0; i -= 1) {
+        const monday = new Date(anchor);
+        monday.setDate(anchor.getDate() - i * 7);
+        const key = makeKey(monday);
+        const weekText = i === 0 ? 'Tuần này' : `${i} tuần trước`;
+        expectedBuckets.push({ key, label: weekText });
+      }
+    } else {
+      const monthAnchor = new Date(baseDate.getFullYear(), baseDate.getMonth(), 1);
+      for (let i = cfg.points - 1; i >= 0; i -= 1) {
+        const cur = new Date(monthAnchor.getFullYear(), monthAnchor.getMonth() - i, 1);
+        const key = makeKey(cur);
+        const monthNum = cur.getMonth() + 1;
+        expectedBuckets.push({ key, label: `T${monthNum}/${cur.getFullYear()}` });
+      }
+    }
+
+    const trendMap = new Map(
+      trendRows.map((r) => [
+        String(r.periodKey),
+        { revenue: Number(r.revenue || 0), orders: Number(r.orders || 0) }
+      ])
+    );
+
+    const trend = expectedBuckets.map((bucket) => {
+      const current = trendMap.get(bucket.key) || { revenue: 0, orders: 0 };
+      return {
+        label: bucket.label,
+        revenue: Number(current.revenue || 0),
+        orders: Number(current.orders || 0)
+      };
+    });
 
     const [topProductsRows] = await db.query(
       `
         SELECT
           p.product_name,
-          COALESCE(SUM(oi.quantity), 0) AS qty
+          COALESCE(SUM(oi.quantity), 0) AS qty,
+          COALESCE(SUM(oi.quantity * COALESCE(oi.price_at_sale, p.sale_price, p.base_price, 0)), 0) AS revenue
         FROM order_items oi
         JOIN orders o ON o.order_id = oi.order_id
         JOIN products p ON p.product_id = oi.product_id
         WHERE o.status = 'paid'
-          AND o.created_at >= NOW() - INTERVAL ${cfg.mysqlInterval}
+          AND CONVERT_TZ(o.created_at, '+00:00', '+07:00') >= ${nowLocalExpr} - INTERVAL ${cfg.mysqlInterval}
         GROUP BY p.product_id, p.product_name
-        ORDER BY qty DESC
+        ORDER BY qty DESC, revenue DESC
         LIMIT 5
       `
     );
@@ -195,12 +297,12 @@ const getAnalytics = async (req, res) => {
     const [hourRows] = await db.query(
       `
         SELECT
-          WEEKDAY(created_at) AS weekdayNum,
-          HOUR(created_at) AS hourNum,
+          WEEKDAY(${createdAtLocalExpr}) AS weekdayNum,
+          HOUR(${createdAtLocalExpr}) AS hourNum,
           COUNT(*) AS cnt
         FROM orders
         WHERE status = 'paid'
-          AND created_at >= NOW() - INTERVAL ${cfg.mysqlInterval}
+          AND ${createdAtLocalExpr} >= ${nowLocalExpr} - INTERVAL ${cfg.mysqlInterval}
         GROUP BY weekdayNum, hourNum
       `
     );
@@ -208,11 +310,11 @@ const getAnalytics = async (req, res) => {
     const [busiestDayRows] = await db.query(
       `
         SELECT
-          WEEKDAY(created_at) AS weekdayNum,
+          WEEKDAY(${createdAtLocalExpr}) AS weekdayNum,
           COUNT(*) AS orderCount
         FROM orders
         WHERE status = 'paid'
-          AND created_at >= NOW() - INTERVAL ${cfg.mysqlInterval}
+          AND ${createdAtLocalExpr} >= ${nowLocalExpr} - INTERVAL ${cfg.mysqlInterval}
         GROUP BY weekdayNum
         ORDER BY orderCount DESC
         LIMIT 1
@@ -277,13 +379,11 @@ const getAnalytics = async (req, res) => {
         avgOrderValue: Number(overviewRows[0]?.avgOrderValue || 0),
         customerCount: Number(overviewRows[0]?.customerCount || 0)
       },
-      trend: trendRows.map((r) => ({
-        label: r.periodLabel,
-        revenue: Number(r.revenue || 0)
-      })),
+      trend,
       topProducts: topProductsRows.map((r) => ({
         product_name: r.product_name,
-        qty: Number(r.qty || 0)
+        qty: Number(r.qty || 0),
+        revenue: Number(r.revenue || 0)
       })),
       peakHours: {
         buckets: hourBuckets,
@@ -858,6 +958,78 @@ const markOrderPaid = async (req, res) => {
   }
 };
 
+const updateInvoiceStatus = async (req, res) => {
+  const orderId = Number(req.params.id);
+  const nextStatus = String(req.body?.status || '').trim();
+
+  if (!Number.isFinite(orderId) || orderId <= 0) {
+    return res.status(400).json({ message: 'order id không hợp lệ' });
+  }
+  if (!['pending', 'paid', 'cancelled'].includes(nextStatus)) {
+    return res.status(400).json({ message: 'Trạng thái không hợp lệ' });
+  }
+
+  try {
+    const [rows] = await db.query('SELECT order_id, status FROM orders WHERE order_id = ? LIMIT 1', [orderId]);
+    if (!rows.length) return res.status(404).json({ message: 'Không tìm thấy hóa đơn' });
+
+    const currentStatus = String(rows[0].status || 'pending');
+
+    if (currentStatus === nextStatus) {
+      return res.json({ message: 'Trạng thái không thay đổi', order_id: orderId, status: nextStatus });
+    }
+
+    const isBlockedDirectSwitch =
+      (currentStatus === 'cancelled' && nextStatus === 'paid') ||
+      (currentStatus === 'paid' && nextStatus === 'cancelled');
+
+    if (isBlockedDirectSwitch) {
+      return res.status(400).json({
+        message: 'Không được đổi trực tiếp giữa Đã hủy và Đã thanh toán. Vui lòng chuyển qua trạng thái Chờ thanh toán trước.'
+      });
+    }
+
+    await db.query('UPDATE orders SET status = ? WHERE order_id = ?', [nextStatus, orderId]);
+    return res.json({ message: 'Cập nhật trạng thái đơn hàng thành công', order_id: orderId, status: nextStatus });
+  } catch (error) {
+    console.error('Lỗi cập nhật trạng thái hóa đơn:', error);
+    return res.status(500).json({ message: 'Lỗi server', error: error.message });
+  }
+};
+
+const deleteInvoice = async (req, res) => {
+  const orderId = Number(req.params.id);
+  if (!Number.isFinite(orderId) || orderId <= 0) {
+    return res.status(400).json({ message: 'order id không hợp lệ' });
+  }
+
+  let conn;
+  try {
+    conn = await db.getConnection();
+    await conn.beginTransaction();
+
+    const [rows] = await conn.query('SELECT order_id FROM orders WHERE order_id = ? LIMIT 1', [orderId]);
+    if (!rows.length) {
+      await conn.rollback();
+      return res.status(404).json({ message: 'Không tìm thấy hóa đơn' });
+    }
+
+    await conn.query('DELETE FROM order_items WHERE order_id = ?', [orderId]);
+    await conn.query('DELETE FROM orders WHERE order_id = ?', [orderId]);
+
+    await conn.commit();
+    return res.json({ message: 'Xóa hóa đơn thành công', order_id: orderId });
+  } catch (error) {
+    if (conn) {
+      try { await conn.rollback(); } catch (_) {}
+    }
+    console.error('Lỗi xóa hóa đơn:', error);
+    return res.status(500).json({ message: 'Lỗi server', error: error.message });
+  } finally {
+    if (conn) conn.release();
+  }
+};
+
 // Helper functions
 const getStatusText = (status) => {
   const statusMap = {
@@ -884,5 +1056,7 @@ module.exports = {
   getInvoices,
   getInvoiceDetail,
   checkoutOrder,
-  markOrderPaid
+  markOrderPaid,
+  updateInvoiceStatus,
+  deleteInvoice
 };

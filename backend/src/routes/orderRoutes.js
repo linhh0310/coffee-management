@@ -25,4 +25,10 @@ router.post('/checkout', authMiddleware, orderController.checkoutOrder);
 // API xác nhận đơn hàng đã thanh toán (thủ công)
 router.patch('/:id/mark-paid', authMiddleware, orderController.markOrderPaid);
 
+// API cập nhật trạng thái hóa đơn
+router.patch('/invoices/:id/status', authMiddleware, requireRole('admin'), orderController.updateInvoiceStatus);
+
+// API xóa hóa đơn
+router.delete('/invoices/:id', authMiddleware, requireRole('admin'), orderController.deleteInvoice);
+
 module.exports = router;

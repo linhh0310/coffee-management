@@ -20,6 +20,7 @@ export default function Login() {
 
     const clean = identifier.trim();
     const phone = clean.replace(/\D/g, '');
+    const isLikelyEmail = clean.includes('@');
 
     try {
       // Ưu tiên thử đăng nhập tài khoản hệ thống trước
@@ -42,8 +43,9 @@ export default function Login() {
 
     try {
       const customerRes = await axios.post('/api/customers/auth/login', {
-        phone: phone || clean,
-        password
+        phone: isLikelyEmail ? '' : (phone || clean),
+        password,
+        email: isLikelyEmail ? clean : ''
       });
 
       localStorage.setItem('customerToken', customerRes.data?.token || '');
