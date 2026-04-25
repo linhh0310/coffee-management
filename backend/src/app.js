@@ -8,6 +8,7 @@ const customerRoutes = require('./routes/customerRoutes');
 const promotionRoutes = require('./routes/promotionRoutes');
 const aiRoutes = require('./routes/aiRoutes');
 const inventoryRoutes = require('./routes/inventoryRoutes');
+const chatRoutes = require('./routes/chatRoutes');
 const path = require('path');
 require('dotenv').config();
 
@@ -26,6 +27,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/customers', customerRoutes);
 app.use('/api/promotions', promotionRoutes);
 app.use('/api/ai', aiRoutes);
+app.use('/api/chat', chatRoutes);
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {

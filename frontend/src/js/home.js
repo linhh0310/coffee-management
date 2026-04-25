@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import { Link, useNavigate } from 'react-router-dom';
+import ChatWidget from '../components/ChatWidget';
 
 const banners = [
   {
@@ -341,6 +342,7 @@ export default function Home() {
           </article>
         </section>
       </main>
+      <ChatWidget />
     </div>
   );
 }

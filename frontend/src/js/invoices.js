@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
@@ -14,6 +15,11 @@ function formatDateTime(value) {
     date: d.toLocaleDateString('vi-VN'),
     time: d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
   };
+}
+
+function ModalPortal({ children }) {
+  if (typeof document === 'undefined') return null;
+  return createPortal(children, document.body);
 }
 
 export default function Invoices() {
@@ -390,132 +396,133 @@ export default function Invoices() {
         </div>
       </main>
 
-      {deleteModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-[1px] flex items-center justify-center p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white border border-slate-200 shadow-2xl overflow-hidden">
-            <div className="px-5 py-4 border-b border-slate-200">
-              <h3 className="text-lg font-extrabold text-slate-900">Xác nhận xóa hóa đơn</h3>
-              <p className="text-sm text-slate-600 mt-1">Bạn có chắc chắn muốn xóa hóa đơn không?</p>
-            </div>
+      <ModalPortal>
+        {deleteModalOpen && (
+          <div className="fixed inset-0 z-[9999] bg-black/40 backdrop-blur-[1px] flex items-center justify-center p-4">
+            <div className="w-full max-w-md rounded-2xl bg-white border border-slate-200 shadow-2xl overflow-hidden">
+              <div className="px-5 py-4 border-b border-slate-200">
+                <h3 className="text-lg font-extrabold text-slate-900">Xác nhận xóa hóa đơn</h3>
+                <p className="text-sm text-slate-600 mt-1">Bạn có chắc chắn muốn xóa hóa đơn không?</p>
+              </div>
 
-            <div className="px-5 py-4 bg-slate-50 flex items-center justify-end gap-3">
-              <button
-                type="button"
-                onClick={closeDeleteModal}
-                disabled={!!savingId}
-                className="px-4 py-2 rounded-xl border border-slate-300 text-slate-700 font-semibold hover:bg-white disabled:opacity-50"
-              >
-                Không
-              </button>
-              <button
-                type="button"
-                onClick={confirmDeleteInvoice}
-                disabled={!!savingId}
-                className="px-4 py-2 rounded-xl bg-red-600 text-white font-semibold hover:bg-red-700 disabled:opacity-50"
-              >
-                {savingId ? 'Đang xóa...' : 'Có'}
-              </button>
+              <div className="px-5 py-4 bg-slate-50 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={closeDeleteModal}
+                  disabled={!!savingId}
+                  className="px-4 py-2 rounded-xl border border-slate-300 text-slate-700 font-semibold hover:bg-white disabled:opacity-50"
+                >
+                  Không
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmDeleteInvoice}
+                  disabled={!!savingId}
+                  className="px-4 py-2 rounded-xl bg-red-600 text-white font-semibold hover:bg-red-700 disabled:opacity-50"
+                >
+                  {savingId ? 'Đang xóa...' : 'Có'}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {detailOpen && (
-        <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[1px] flex items-center justify-center p-4">
-          <div className="w-full max-w-[360px] rounded-xl bg-[#f8f8f8] border border-slate-200 shadow-2xl overflow-hidden">
-            <div className="p-3 border-b border-slate-200 bg-white flex items-center justify-between">
-              <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Chi tiết hóa đơn</p>
-              <button
-                type="button"
-                onClick={closeDetail}
-                className="px-2 py-1 rounded-md border border-slate-200 text-slate-600 text-xs hover:bg-slate-50"
-              >
-                Đóng
-              </button>
-            </div>
+        {detailOpen && (
+          <div className="fixed inset-0 z-[9999] bg-black/40 backdrop-blur-[1px] flex items-center justify-center p-4">
+            <div className="w-full max-w-[360px] rounded-xl bg-[#f8f8f8] border border-slate-200 shadow-2xl overflow-hidden">
+              <div className="p-3 border-b border-slate-200 bg-white flex items-center justify-between">
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Chi tiết hóa đơn</p>
+                <button
+                  type="button"
+                  onClick={closeDetail}
+                  className="px-2 py-1 rounded-md border border-slate-200 text-slate-600 text-xs hover:bg-slate-50"
+                >
+                  Đóng
+                </button>
+              </div>
 
-            <div className="p-3 bg-[#f3f3f3]">
-              {detailLoading && <p className="text-sm text-slate-500">Đang tải chi tiết hóa đơn...</p>}
-              {!detailLoading && detailError && <p className="text-sm text-red-600">{detailError}</p>}
+              <div className="p-3 bg-[#f3f3f3]">
+                {detailLoading && <p className="text-sm text-slate-500">Đang tải chi tiết hóa đơn...</p>}
+                {!detailLoading && detailError && <p className="text-sm text-red-600">{detailError}</p>}
 
-              {!detailLoading && !detailError && invoiceDetail && (
-                <div className="mx-auto w-full max-w-[320px] bg-white border border-slate-200 rounded-md p-4 text-slate-800">
-                  <div className="text-center border-b border-dashed border-slate-300 pb-3">
-                    <h3 className="text-[28px] font-black leading-none text-[#b87414] tracking-tight">GOLDEN ROAST</h3>
-                    <p className="text-[11px] mt-1">123 Coffee St, City</p>
-                    <p className="text-[10px] text-slate-500">Tel: 0915 123 4567</p>
-                  </div>
-
-                  <div className="mt-3 text-[11px] grid grid-cols-2 gap-y-1">
-                    <p><span className="font-semibold">Hóa đơn</span> #{invoiceDetail.code}</p>
-                    <p className="text-right"><span className="font-semibold">Số</span> {invoiceDetail.id}</p>
-                    <p>Ngày: {formatDateTime(invoiceDetail.createdAt).date} {formatDateTime(invoiceDetail.createdAt).time}</p>
-                    <p className="text-right">Thu ngân: {invoiceDetail.cashierName || 'N/A'}</p>
-                    <p className="col-span-2">Khu vực/Bàn: {invoiceDetail.tableLabel || 'Mang đi'}</p>
-                  </div>
-
-                  <div className="mt-3 border-t border-b border-slate-200 py-2">
-                    <div className="grid grid-cols-12 text-[10px] font-bold text-slate-500 uppercase">
-                      <div className="col-span-2">SL</div>
-                      <div className="col-span-7">Tên món</div>
-                      <div className="col-span-3 text-right">Thành tiền</div>
+                {!detailLoading && !detailError && invoiceDetail && (
+                  <div className="mx-auto w-full max-w-[320px] bg-white border border-slate-200 rounded-md p-4 text-slate-800">
+                    <div className="text-center border-b border-dashed border-slate-300 pb-3">
+                      <h3 className="text-[28px] font-black leading-none text-[#b87414] tracking-tight">GOLDEN ROAST</h3>
+                      <p className="text-[11px] mt-1">123 Coffee St, City</p>
+                      <p className="text-[10px] text-slate-500">Tel: 0915 123 4567</p>
                     </div>
 
-                    <div className="mt-1 space-y-1.5">
-                      {(invoiceDetail.items || []).map((it, idx) => (
-                        <div key={`${it.name}-${idx}`} className="grid grid-cols-12 text-[11px]">
-                          <div className="col-span-2">{it.qty}</div>
-                          <div className="col-span-7">
-                            <p className="font-semibold leading-tight">{it.name}</p>
-                            <p className="text-[10px] text-slate-500">{formatVnd(it.unitPrice)} / món</p>
+                    <div className="mt-3 text-[11px] grid grid-cols-2 gap-y-1">
+                      <p><span className="font-semibold">Hóa đơn</span> #{invoiceDetail.code}</p>
+                      <p className="text-right"><span className="font-semibold">Số</span> {invoiceDetail.id}</p>
+                      <p>Ngày: {formatDateTime(invoiceDetail.createdAt).date} {formatDateTime(invoiceDetail.createdAt).time}</p>
+                      <p className="text-right">Thu ngân: {invoiceDetail.cashierName || 'N/A'}</p>
+                      <p className="col-span-2">Khu vực/Bàn: {invoiceDetail.tableLabel || 'Mang đi'}</p>
+                    </div>
+
+                    <div className="mt-3 border-t border-b border-slate-200 py-2">
+                      <div className="grid grid-cols-12 text-[10px] font-bold text-slate-500 uppercase">
+                        <div className="col-span-2">SL</div>
+                        <div className="col-span-7">Tên món</div>
+                        <div className="col-span-3 text-right">Thành tiền</div>
+                      </div>
+
+                      <div className="mt-1 space-y-1.5">
+                        {(invoiceDetail.items || []).map((it, idx) => (
+                          <div key={`${it.name}-${idx}`} className="grid grid-cols-12 text-[11px]">
+                            <div className="col-span-2">{it.qty}</div>
+                            <div className="col-span-7">
+                              <p className="font-semibold leading-tight">{it.name}</p>
+                              <p className="text-[10px] text-slate-500">{formatVnd(it.unitPrice)} / món</p>
+                            </div>
+                            <div className="col-span-3 text-right font-semibold">{formatVnd(it.lineTotal)}</div>
                           </div>
-                          <div className="col-span-3 text-right font-semibold">{formatVnd(it.lineTotal)}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="mt-3 text-[11px] space-y-1">
-                    <p className="flex items-center justify-between"><span>Tạm tính</span><span>{formatVnd(invoiceDetail.subtotal)}</span></p>
-                    <p className="flex items-center justify-between"><span>Thuế GTGT</span><span>{formatVnd(invoiceDetail.tax)}</span></p>
-                    <p className="flex items-center justify-between text-[#b87414] font-bold"><span>Chiết khấu thành viên</span><span>-{formatVnd(invoiceDetail.discount || 0)}</span></p>
-                    <p className="flex items-center justify-between text-lg font-black border-t border-dashed border-slate-300 pt-2 mt-1">
-                      <span>TỔNG CỘNG</span><span>{formatVnd(invoiceDetail.total)}</span>
-                    </p>
-                  </div>
-
-                  <div className="mt-3 pt-2 border-t border-dashed border-slate-300 text-[10px] grid grid-cols-2 gap-2">
-                    <div>
-                      <p className="font-bold uppercase text-slate-500">Hình thức thanh toán</p>
-                      <p className="font-semibold mt-0.5">{invoiceDetail.paymentMethod || 'N/A'}</p>
-                      <p className="font-bold uppercase text-slate-500 mt-2">Trạng thái</p>
-                      <p className="font-black text-emerald-600">{invoiceDetail.status || 'Đã thanh toán'}</p>
-                    </div>
-                    <div className="text-right">
-                      <div className="inline-flex flex-col items-center">
-                        <div className="size-14 rounded border border-slate-300 bg-[#d8eef8]" />
-                        <p className="mt-1 text-[9px] text-slate-500">Quét mã để xem lại hóa đơn</p>
+                        ))}
                       </div>
                     </div>
-                  </div>
 
-                  <div className="mt-3 border-t border-dashed border-slate-300 pt-2 text-center">
-                    <p className="text-[10px] text-slate-500">CẢM ƠN BẠN ĐÃ LỰA CHỌN GOLDEN ROAST</p>
-                    <button
-                      type="button"
-                      onClick={() => window.print()}
-                      className="mt-2 px-4 py-1.5 rounded-full bg-[#b87414] text-white text-xs font-bold"
-                    >
-                      In hóa đơn
-                    </button>
+                    <div className="mt-3 text-[11px] space-y-1">
+                      <p className="flex items-center justify-between"><span>Tạm tính</span><span>{formatVnd(invoiceDetail.subtotal)}</span></p>
+                      <p className="flex items-center justify-between"><span>Thuế GTGT</span><span>{formatVnd(invoiceDetail.tax)}</span></p>
+                      <p className="flex items-center justify-between text-[#b87414] font-bold"><span>Chiết khấu thành viên</span><span>-{formatVnd(invoiceDetail.discount || 0)}</span></p>
+                      <p className="flex items-center justify-between text-lg font-black border-t border-dashed border-slate-300 pt-2 mt-1">
+                        <span>TỔNG CỘNG</span><span>{formatVnd(invoiceDetail.total)}</span>
+                      </p>
+                    </div>
+
+                    <div className="mt-3 pt-2 border-t border-dashed border-slate-300 text-[10px] grid grid-cols-2 gap-2">
+                      <div>
+                        <p className="font-bold uppercase text-slate-500">Hình thức thanh toán</p>
+                        <p className="font-semibold mt-0.5">{invoiceDetail.paymentMethod || 'N/A'}</p>
+                        <p className="font-bold uppercase text-slate-500 mt-2">Trạng thái</p>
+                        <p className="font-black text-emerald-600">{invoiceDetail.status || 'Đã thanh toán'}</p>
+                      </div>
+                      <div className="text-right">
+                        <div className="inline-flex flex-col items-center">
+                          <div className="size-14 rounded border border-slate-300 bg-[#d8eef8]" />
+                          <p className="mt-1 text-[9px] text-slate-500">Quét mã để xem lại hóa đơn</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 border-t border-dashed border-slate-300 pt-2 text-center">
+                      <p className="text-[10px] text-slate-500">CẢM ƠN BẠN ĐÃ LỰA CHỌN GOLDEN ROAST</p>
+                      <button
+                        type="button"
+                        onClick={() => window.print()}
+                        className="mt-2 px-4 py-1.5 rounded-full bg-[#b87414] text-white text-xs font-bold"
+                      >
+                        In hóa đơn
+                      </button>
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </ModalPortal>
     </div>
   );
 }
-

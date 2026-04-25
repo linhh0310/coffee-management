@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
@@ -11,12 +12,6 @@ function formatVnd(n) {
   return `${Math.round(Number(n || 0)).toLocaleString('vi-VN')}đ`;
 }
 
-function formatUnit(u) {
-  if (!u) return '';
-  const map = { g: 'GRAM', ml: 'ML', kg: 'KILOGRAM', cái: 'CÁI', chai: 'CHAI' };
-  return map[u.toLowerCase()] || String(u).toUpperCase();
-}
-
 function ingredientStatus(ing) {
   const stock = Number(ing.stock_quantity) || 0;
   const min = Number(ing.min_stock_alert) || 1;
@@ -25,11 +20,9 @@ function ingredientStatus(ing) {
   return { key: 'ok', label: 'Ổn định', pill: 'bg-emerald-100 text-emerald-800', bar: 'bg-emerald-500', dot: 'bg-emerald-500' };
 }
 
-function stockProgress(ing) {
-  const stock = Number(ing.stock_quantity) || 0;
-  const min = Number(ing.min_stock_alert) || 1;
-  const target = Math.max(min * 3, stock * 1.2, 1);
-  return Math.min(100, Math.round((stock / target) * 100));
+function ModalPortal({ children }) {
+  if (typeof document === 'undefined') return null;
+  return createPortal(children, document.body);
 }
 
 export default function ProductList() {
@@ -47,6 +40,8 @@ export default function ProductList() {
   const [showProductModal, setShowProductModal] = useState(false);
   const [editingProductId, setEditingProductId] = useState(null);
   const [savingProduct, setSavingProduct] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deletingProduct, setDeletingProduct] = useState(false);
   const [productForm, setProductForm] = useState({
     product_name: '',
     category_id: '',
@@ -59,23 +54,14 @@ export default function ProductList() {
   const pageSize = 6;
 
   const [inventorySubTab, setInventorySubTab] = useState('ingredients');
-  const [inventoryTransactions, setInventoryTransactions] = useState([]);
+  const [, setInventoryTransactions] = useState([]);
   const [stockReceipts, setStockReceipts] = useState([]);
   const [stockTakes, setStockTakes] = useState([]);
-  const [loadingInventoryMeta, setLoadingInventoryMeta] = useState(false);
-  const [recipeProductId, setRecipeProductId] = useState('');
-  const [recipeSize, setRecipeSize] = useState('M');
-  const [recipeItems, setRecipeItems] = useState([]);
-  const [recipeLoading, setRecipeLoading] = useState(false);
 
   const [receiptForm, setReceiptForm] = useState({ supplier_name: '', receipt_date: '', note: '' });
   const [receiptItems, setReceiptItems] = useState([{ ingredient_id: '', pack_quantity: 0, conversion_factor: 1, unit_cost: 0 }]);
   const [takeForm, setTakeForm] = useState({ take_date: '', note: '' });
   const [takeItems, setTakeItems] = useState([{ ingredient_id: '', actual_quantity: 0 }]);
-  const [historyTypeFilter, setHistoryTypeFilter] = useState('all');
-  const [historyKeyword, setHistoryKeyword] = useState('');
-  const [historyFromDate, setHistoryFromDate] = useState('');
-  const [historyToDate, setHistoryToDate] = useState('');
   const [inventoryStatusFilter, setInventoryStatusFilter] = useState('all');
   const [showIngredientDetail, setShowIngredientDetail] = useState(false);
   const [selectedIngredient, setSelectedIngredient] = useState(null);
@@ -85,12 +71,6 @@ export default function ProductList() {
   const [importQty, setImportQty] = useState('');
   const [stockTakeQty, setStockTakeQty] = useState('');
 
-  // AI widget: xu hướng món bán chạy để gợi ý nhập kho / điều chỉnh menu
-  const [aiDays, setAiDays] = useState(7);
-  const [aiBest, setAiBest] = useState(null);
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiError, setAiError] = useState('');
-  const [aiTrendFetchedAt, setAiTrendFetchedAt] = useState(null);
 
   const handleLogout = React.useCallback(() => {
     localStorage.removeItem('token');
@@ -131,7 +111,6 @@ export default function ProductList() {
         }
 
         try {
-          setLoadingInventoryMeta(true);
           const [txRes, receiptRes, takeRes] = await Promise.all([
             axios.get('/api/ingredients/transactions', { headers: { Authorization: `Bearer ${token}` } }),
             axios.get('/api/ingredients/receipts', { headers: { Authorization: `Bearer ${token}` } }),
@@ -145,8 +124,6 @@ export default function ProductList() {
           setInventoryTransactions([]);
           setStockReceipts([]);
           setStockTakes([]);
-        } finally {
-          setLoadingInventoryMeta(false);
         }
       } catch (err) {
         if (err.response?.status === 401 || err.response?.status === 403) {
@@ -160,47 +137,6 @@ export default function ProductList() {
     };
     load();
   }, [handleLogout]);
-
-  const loadAiBest = async () => {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      handleLogout();
-      return;
-    }
-    setAiLoading(true);
-    setAiError('');
-    try {
-      const res = await axios.get(`/api/ai/best-selling?days=${aiDays}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setAiBest(res.data || null);
-      setAiTrendFetchedAt(res.data?.generated_at || new Date().toISOString());
-    } catch (err) {
-      const status = err?.response?.status;
-      if (status === 401 || status === 403) {
-        handleLogout();
-        return;
-      }
-      setAiError(err?.response?.data?.message || 'Không tải được xu hướng AI.');
-    } finally {
-      setAiLoading(false);
-    }
-  };
-
-  // Tải xu hướng AI một lần khi mở trang sản phẩm
-  useEffect(() => {
-    loadAiBest();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const aiTrendCards = useMemo(() => {
-    if (!aiBest?.ranking?.length) return [];
-    if (aiBest.trend_cards?.length) return aiBest.trend_cards;
-    return aiBest.ranking.slice(0, 5).map((r) => ({
-      ...r,
-      image_url: products.find((p) => Number(p.product_id) === Number(r.product_id))?.image_url || null
-    }));
-  }, [aiBest, products]);
 
   const menuCategories = useMemo(() => {
     const all = (products || []).map((p) => String(p?.category_name || '').trim()).filter(Boolean);
@@ -250,23 +186,6 @@ export default function ProductList() {
     });
   }, [ingredients, query, inventoryStatusFilter]);
 
-  const filteredInventoryTransactions = useMemo(() => {
-    const kw = historyKeyword.trim().toLowerCase();
-    return (inventoryTransactions || []).filter((t) => {
-      const matchType = historyTypeFilter === 'all' ? true : t.transaction_type === historyTypeFilter;
-      const matchKw = kw
-        ? String(t?.ingredient_name || '').toLowerCase().includes(kw) ||
-          String(t?.reference_type || '').toLowerCase().includes(kw)
-        : true;
-
-      const created = t?.created_at ? new Date(t.created_at) : null;
-      const fromOk = historyFromDate ? (created ? created >= new Date(`${historyFromDate}T00:00:00`) : false) : true;
-      const toOk = historyToDate ? (created ? created <= new Date(`${historyToDate}T23:59:59`) : false) : true;
-
-      return matchType && matchKw && fromOk && toOk;
-    });
-  }, [inventoryTransactions, historyTypeFilter, historyKeyword, historyFromDate, historyToDate]);
-
   const lowAlerts = useMemo(() => {
     return (ingredients || [])
       .filter((i) => {
@@ -275,16 +194,6 @@ export default function ProductList() {
         return s < m * 1.5;
       })
       .slice(0, 6);
-  }, [ingredients]);
-
-  const recentActivity = useMemo(() => {
-    const sorted = [...(ingredients || [])].sort((a, b) => new Date(b.updated_at || 0) - new Date(a.updated_at || 0));
-    return sorted.slice(0, 5).map((i) => ({
-      id: i.ingredient_id,
-      title: i.ingredient_name,
-      sub: `Tồn: ${Number(i.stock_quantity).toLocaleString('vi-VN')} ${i.unit || ''}`,
-      time: i.updated_at ? new Date(i.updated_at).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : ''
-    }));
   }, [ingredients]);
 
   const totalPages = Math.max(1, Math.ceil(filteredProducts.length / pageSize));
@@ -306,7 +215,6 @@ export default function ProductList() {
 
   const refreshInventoryMeta = async (token) => {
     try {
-      setLoadingInventoryMeta(true);
       const [txRes, receiptRes, takeRes] = await Promise.all([
         axios.get('/api/ingredients/transactions', { headers: { Authorization: `Bearer ${token}` } }),
         axios.get('/api/ingredients/receipts', { headers: { Authorization: `Bearer ${token}` } }),
@@ -320,65 +228,12 @@ export default function ProductList() {
       setInventoryTransactions([]);
       setStockReceipts([]);
       setStockTakes([]);
-    } finally {
-      setLoadingInventoryMeta(false);
     }
   };
 
   const refreshIngredients = async (token) => {
     const iRes = await axios.get('/api/ingredients', { headers: { Authorization: `Bearer ${token}` } });
     setIngredients(Array.isArray(iRes.data) ? iRes.data : []);
-  };
-
-  const loadRecipeForProduct = async (productId, size = recipeSize) => {
-    const token = localStorage.getItem('token');
-    if (!token || !productId) return;
-    setRecipeLoading(true);
-    try {
-      const res = await axios.get(`/api/ingredients/recipes/${productId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      const variants = Array.isArray(res.data?.variants) ? res.data.variants : [];
-      const target = variants.find((v) => String(v.size_label || '').toUpperCase() === String(size || '').toUpperCase()) || variants[0];
-      const items = Array.isArray(target?.items) ? target.items : [];
-      setRecipeItems(
-        items.map((it) => ({
-          ingredient_id: it.ingredient_id,
-          amount_needed: Number(it.amount_needed || 0)
-        }))
-      );
-    } catch (err) {
-      if (err?.response?.status === 401 || err?.response?.status === 403) return handleLogout();
-      setRecipeItems([]);
-    } finally {
-      setRecipeLoading(false);
-    }
-  };
-
-  const saveVariantRecipe = async () => {
-    const token = localStorage.getItem('token');
-    if (!token) return handleLogout();
-    if (!recipeProductId) return toast.error('Chọn sản phẩm trước');
-
-    const items = recipeItems
-      .map((x) => ({ ingredient_id: Number(x.ingredient_id), amount_needed: Number(x.amount_needed) }))
-      .filter((x) => x.ingredient_id > 0 && x.amount_needed > 0);
-
-    try {
-      await axios.post(
-        `/api/ingredients/recipes/${recipeProductId}`,
-        {
-          size_label: recipeSize,
-          multiplier: recipeSize === 'S' ? 0.85 : recipeSize === 'L' ? 1.2 : 1,
-          items
-        },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      toast.success('Lưu định mức thành công');
-    } catch (err) {
-      if (err?.response?.status === 401 || err?.response?.status === 403) return handleLogout();
-      toast.error(err?.response?.data?.message || 'Lưu định mức thất bại');
-    }
   };
 
   const createIngredientQuick = async () => {
@@ -676,9 +531,17 @@ export default function ProductList() {
     }
   };
 
-  const removeProduct = async (product) => {
-    const ok = window.confirm(`Xác nhận xóa sản phẩm "${product.product_name}"?`);
-    if (!ok) return;
+  const requestDeleteProduct = (product) => {
+    setDeleteTarget(product);
+  };
+
+  const cancelDeleteProduct = () => {
+    if (deletingProduct) return;
+    setDeleteTarget(null);
+  };
+
+  const confirmDeleteProduct = async () => {
+    if (!deleteTarget) return;
 
     const token = localStorage.getItem('token');
     if (!token) {
@@ -686,11 +549,13 @@ export default function ProductList() {
       return;
     }
 
+    setDeletingProduct(true);
     try {
-      await axios.delete(`/api/products/${product.product_id}`, {
+      await axios.delete(`/api/products/${deleteTarget.product_id}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      setProducts((prev) => prev.filter((p) => Number(p.product_id) !== Number(product.product_id)));
+      setProducts((prev) => prev.filter((p) => Number(p.product_id) !== Number(deleteTarget.product_id)));
+      setDeleteTarget(null);
       toast.success('Đã xóa sản phẩm');
     } catch (err) {
       const status = err?.response?.status;
@@ -699,6 +564,8 @@ export default function ProductList() {
         return;
       }
       toast.error(err?.response?.data?.message || 'Xóa sản phẩm thất bại');
+    } finally {
+      setDeletingProduct(false);
     }
   };
 
@@ -1342,7 +1209,7 @@ export default function ProductList() {
                                   <button
                                     type="button"
                                     className="p-2 rounded-lg hover:bg-red-50 text-slate-600"
-                                    onClick={() => removeProduct(p)}
+                                    onClick={() => requestDeleteProduct(p)}
                                   >
                                     <span className="material-symbols-outlined text-[20px]">delete</span>
                                   </button>
@@ -1476,201 +1343,249 @@ export default function ProductList() {
             </>
           )}
 
-          {showIngredientDetail && selectedIngredient && (
-            <div className="fixed inset-0 z-50 bg-black/45 backdrop-blur-[1px] flex items-center justify-center p-4">
-              <div className="w-full max-w-lg rounded-2xl bg-white border border-indigo-100 shadow-2xl overflow-hidden">
-                <div className="px-5 py-4 border-b border-indigo-100 bg-indigo-50 flex items-center justify-between">
-                  <div>
-                    <h3 className="text-lg font-extrabold text-slate-900">Chi tiết nguyên liệu</h3>
-                    <p className="text-xs text-slate-500">Thông tin hiện tại và thao tác nhanh</p>
-                  </div>
-                  <button type="button" onClick={() => setShowIngredientDetail(false)} className="p-1 rounded hover:bg-white/80">
-                    <span className="material-symbols-outlined">close</span>
-                  </button>
-                </div>
-                <div className="p-5 space-y-4 text-sm">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="rounded-xl border border-slate-200 p-3"><p className="text-xs text-slate-500">Mã</p><p className="font-bold text-slate-900">NL-{String(selectedIngredient.ingredient_id).padStart(3, '0')}</p></div>
-                    <div className="rounded-xl border border-slate-200 p-3"><p className="text-xs text-slate-500">Đơn vị</p><p className="font-bold text-slate-900">{selectedIngredient.unit || '—'}</p></div>
-                    <div className="rounded-xl border border-slate-200 p-3"><p className="text-xs text-slate-500">Tồn hiện tại</p><p className="font-bold text-slate-900">{Number(selectedIngredient.stock_quantity || 0).toLocaleString('vi-VN')}</p></div>
-                    <div className="rounded-xl border border-slate-200 p-3"><p className="text-xs text-slate-500">Tồn tối thiểu</p><p className="font-bold text-slate-900">{Number(selectedIngredient.min_stock_alert || 0).toLocaleString('vi-VN')}</p></div>
-                  </div>
-
-                  <div className="rounded-xl border border-indigo-100 bg-indigo-50 p-3">
-                    <p className="text-xs text-indigo-700">Tên nguyên liệu</p>
-                    <p className="font-extrabold text-indigo-900">{selectedIngredient.ingredient_name}</p>
-                  </div>
-
-                  <div className="pt-1 flex gap-2">
-                    <button type="button" onClick={() => openImportModal(selectedIngredient)} className="flex-1 py-2.5 rounded-xl border border-amber-200 text-amber-800 font-semibold">Nhập nhanh</button>
-                    <button type="button" onClick={() => openStockTakeModal(selectedIngredient)} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-semibold">Kiểm kê</button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {showImportModal && modalIngredient && (
-            <div className="fixed inset-0 z-50 bg-black/45 backdrop-blur-[1px] flex items-center justify-center p-4">
-              <div className="w-full max-w-md rounded-2xl bg-white border border-amber-100 shadow-2xl overflow-hidden">
-                <div className="px-5 py-4 border-b border-amber-100 bg-amber-50">
-                  <h3 className="text-lg font-extrabold text-slate-900">Nhập kho nhanh</h3>
-                  <p className="text-xs text-slate-500">{modalIngredient.ingredient_name} ({modalIngredient.unit || '—'})</p>
-                </div>
-                <div className="p-5 space-y-3">
-                  <label className="text-xs font-semibold text-slate-600">Số lượng nhập thêm</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    className="w-full rounded-xl border border-amber-200 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-amber-200"
-                    placeholder="Nhập số lượng"
-                    value={importQty}
-                    onChange={(e) => setImportQty(e.target.value)}
-                  />
-                </div>
-                <div className="px-5 py-4 border-t border-slate-100 flex gap-3">
-                  <button type="button" onClick={() => { setShowImportModal(false); setModalIngredient(null); setImportQty(''); }} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-semibold">Hủy</button>
-                  <button type="button" onClick={() => quickImportIngredient(modalIngredient)} className="flex-1 py-2.5 rounded-xl bg-amber-600 text-white font-semibold">Xác nhận nhập</button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {showStockTakeModal && modalIngredient && (
-            <div className="fixed inset-0 z-50 bg-black/45 backdrop-blur-[1px] flex items-center justify-center p-4">
-              <div className="w-full max-w-md rounded-2xl bg-white border border-slate-200 shadow-2xl overflow-hidden">
-                <div className="px-5 py-4 border-b border-slate-200 bg-slate-50">
-                  <h3 className="text-lg font-extrabold text-slate-900">Kiểm kê nhanh</h3>
-                  <p className="text-xs text-slate-500">{modalIngredient.ingredient_name} ({modalIngredient.unit || '—'})</p>
-                </div>
-                <div className="p-5 space-y-3">
-                  <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
-                    Tồn hệ thống hiện tại: <b>{Number(modalIngredient.stock_quantity || 0).toLocaleString('vi-VN')}</b>
-                  </div>
-                  <label className="text-xs font-semibold text-slate-600">Số lượng thực tế sau kiểm kê</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-slate-300"
-                    placeholder="Nhập số lượng thực tế"
-                    value={stockTakeQty}
-                    onChange={(e) => setStockTakeQty(e.target.value)}
-                  />
-                </div>
-                <div className="px-5 py-4 border-t border-slate-100 flex gap-3">
-                  <button type="button" onClick={() => { setShowStockTakeModal(false); setModalIngredient(null); setStockTakeQty(''); }} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-semibold">Hủy</button>
-                  <button type="button" onClick={() => quickStockTakeIngredient(modalIngredient)} className="flex-1 py-2.5 rounded-xl bg-slate-900 text-white font-semibold">Xác nhận kiểm kê</button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {showProductModal && (
-            <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-              <div className="w-full max-w-xl rounded-2xl bg-white border border-amber-100 shadow-xl overflow-hidden">
-                <div className="px-5 py-4 border-b border-amber-100 flex items-center justify-between">
-                  <h3 className="text-lg font-extrabold text-slate-900">{editingProductId ? 'Sửa sản phẩm' : 'Thêm sản phẩm mới'}</h3>
-                  <button type="button" onClick={() => setShowProductModal(false)} className="p-1 rounded hover:bg-slate-100">
-                    <span className="material-symbols-outlined">close</span>
-                  </button>
-                </div>
-
-                <form onSubmit={submitProductForm} className="p-5 space-y-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-600 mb-1">Tên sản phẩm</label>
-                    <input
-                      className="w-full rounded-xl border border-amber-200 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-amber-200"
-                      value={productForm.product_name}
-                      onChange={(e) => handleProductFormChange('product_name', e.target.value)}
-                      placeholder="Nhập tên sản phẩm"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <ModalPortal>
+            {showIngredientDetail && selectedIngredient && (
+              <div className="fixed inset-0 z-[9999] bg-black/45 backdrop-blur-[1px] flex items-center justify-center p-4">
+                <div className="w-full max-w-lg rounded-2xl bg-white border border-indigo-100 shadow-2xl overflow-hidden">
+                  <div className="px-5 py-4 border-b border-indigo-100 bg-indigo-50 flex items-center justify-between">
                     <div>
-                      <label className="block text-xs font-bold text-slate-600 mb-1">Danh mục</label>
-                      <select
-                        className="w-full rounded-xl border border-amber-200 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-amber-200"
-                        value={productForm.category_id}
-                        onChange={(e) => handleProductFormChange('category_id', e.target.value)}
-                      >
-                        <option value="">-- Chọn danh mục --</option>
-                        {formCategories.map((c) => (
-                          <option key={c.category_id} value={c.category_id}>
-                            {c.category_name}
-                          </option>
-                        ))}
-                      </select>
+                      <h3 className="text-lg font-extrabold text-slate-900">Chi tiết nguyên liệu</h3>
+                      <p className="text-xs text-slate-500">Thông tin hiện tại và thao tác nhanh</p>
                     </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-slate-600 mb-1">Trạng thái</label>
-                      <select
-                        className="w-full rounded-xl border border-amber-200 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-amber-200"
-                        value={productForm.is_available}
-                        onChange={(e) => handleProductFormChange('is_available', Number(e.target.value))}
-                      >
-                        <option value={1}>Đang bán</option>
-                        <option value={0}>Ngừng bán</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-600 mb-1">Giá gốc</label>
-                      <input
-                        type="number"
-                        min="0"
-                        className="w-full rounded-xl border border-amber-200 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-amber-200"
-                        value={productForm.base_price}
-                        onChange={(e) => handleProductFormChange('base_price', e.target.value)}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-slate-600 mb-1">Giá bán</label>
-                      <input
-                        type="number"
-                        min="0"
-                        className="w-full rounded-xl border border-amber-200 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-amber-200"
-                        value={productForm.sale_price}
-                        onChange={(e) => handleProductFormChange('sale_price', e.target.value)}
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-600 mb-1">URL hình ảnh</label>
-                    <input
-                      className="w-full rounded-xl border border-amber-200 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-amber-200"
-                      value={productForm.image_url}
-                      onChange={(e) => handleProductFormChange('image_url', e.target.value)}
-                      placeholder="https://..."
-                    />
-                  </div>
-
-                  <div className="pt-2 flex items-center justify-end gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setShowProductModal(false)}
-                      className="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 text-sm font-bold"
-                    >
-                      Hủy
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={savingProduct}
-                      className="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-bold disabled:opacity-50"
-                    >
-                      {savingProduct ? 'Đang lưu...' : editingProductId ? 'Lưu thay đổi' : 'Thêm sản phẩm'}
+                    <button type="button" onClick={() => setShowIngredientDetail(false)} className="p-1 rounded hover:bg-white/80">
+                      <span className="material-symbols-outlined">close</span>
                     </button>
                   </div>
-                </form>
+                  <div className="p-5 space-y-4 text-sm">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="rounded-xl border border-slate-200 p-3"><p className="text-xs text-slate-500">Mã</p><p className="font-bold text-slate-900">NL-{String(selectedIngredient.ingredient_id).padStart(3, '0')}</p></div>
+                      <div className="rounded-xl border border-slate-200 p-3"><p className="text-xs text-slate-500">Đơn vị</p><p className="font-bold text-slate-900">{selectedIngredient.unit || '—'}</p></div>
+                      <div className="rounded-xl border border-slate-200 p-3"><p className="text-xs text-slate-500">Tồn hiện tại</p><p className="font-bold text-slate-900">{Number(selectedIngredient.stock_quantity || 0).toLocaleString('vi-VN')}</p></div>
+                      <div className="rounded-xl border border-slate-200 p-3"><p className="text-xs text-slate-500">Tồn tối thiểu</p><p className="font-bold text-slate-900">{Number(selectedIngredient.min_stock_alert || 0).toLocaleString('vi-VN')}</p></div>
+                    </div>
+
+                    <div className="rounded-xl border border-indigo-100 bg-indigo-50 p-3">
+                      <p className="text-xs text-indigo-700">Tên nguyên liệu</p>
+                      <p className="font-extrabold text-indigo-900">{selectedIngredient.ingredient_name}</p>
+                    </div>
+
+                    <div className="pt-1 flex gap-2">
+                      <button type="button" onClick={() => openImportModal(selectedIngredient)} className="flex-1 py-2.5 rounded-xl border border-amber-200 text-amber-800 font-semibold">Nhập nhanh</button>
+                      <button type="button" onClick={() => openStockTakeModal(selectedIngredient)} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-semibold">Kiểm kê</button>
+                    </div>
+                  </div>
+                </div>
               </div>
-            </div>
-          )}
+            )}
+
+            {showImportModal && modalIngredient && (
+              <div className="fixed inset-0 z-[9999] bg-black/45 backdrop-blur-[1px] flex items-center justify-center p-4">
+                <div className="w-full max-w-md rounded-2xl bg-white border border-amber-100 shadow-2xl overflow-hidden">
+                  <div className="px-5 py-4 border-b border-amber-100 bg-amber-50">
+                    <h3 className="text-lg font-extrabold text-slate-900">Nhập kho nhanh</h3>
+                    <p className="text-xs text-slate-500">{modalIngredient.ingredient_name} ({modalIngredient.unit || '—'})</p>
+                  </div>
+                  <div className="p-5 space-y-3">
+                    <label className="text-xs font-semibold text-slate-600">Số lượng nhập thêm</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      className="w-full rounded-xl border border-amber-200 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-amber-200"
+                      placeholder="Nhập số lượng"
+                      value={importQty}
+                      onChange={(e) => setImportQty(e.target.value)}
+                    />
+                  </div>
+                  <div className="px-5 py-4 border-t border-slate-100 flex gap-3">
+                    <button type="button" onClick={() => { setShowImportModal(false); setModalIngredient(null); setImportQty(''); }} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-semibold">Hủy</button>
+                    <button type="button" onClick={() => quickImportIngredient(modalIngredient)} className="flex-1 py-2.5 rounded-xl bg-amber-600 text-white font-semibold">Xác nhận nhập</button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {showStockTakeModal && modalIngredient && (
+              <div className="fixed inset-0 z-[9999] bg-black/45 backdrop-blur-[1px] flex items-center justify-center p-4">
+                <div className="w-full max-w-md rounded-2xl bg-white border border-slate-200 shadow-2xl overflow-hidden">
+                  <div className="px-5 py-4 border-b border-slate-200 bg-slate-50">
+                    <h3 className="text-lg font-extrabold text-slate-900">Kiểm kê nhanh</h3>
+                    <p className="text-xs text-slate-500">{modalIngredient.ingredient_name} ({modalIngredient.unit || '—'})</p>
+                  </div>
+                  <div className="p-5 space-y-3">
+                    <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
+                      Tồn hệ thống hiện tại: <b>{Number(modalIngredient.stock_quantity || 0).toLocaleString('vi-VN')}</b>
+                    </div>
+                    <label className="text-xs font-semibold text-slate-600">Số lượng thực tế sau kiểm kê</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-slate-300"
+                      placeholder="Nhập số lượng thực tế"
+                      value={stockTakeQty}
+                      onChange={(e) => setStockTakeQty(e.target.value)}
+                    />
+                  </div>
+                  <div className="px-5 py-4 border-t border-slate-100 flex gap-3">
+                    <button type="button" onClick={() => { setShowStockTakeModal(false); setModalIngredient(null); setStockTakeQty(''); }} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-semibold">Hủy</button>
+                    <button type="button" onClick={() => quickStockTakeIngredient(modalIngredient)} className="flex-1 py-2.5 rounded-xl bg-slate-900 text-white font-semibold">Xác nhận kiểm kê</button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {deleteTarget && (
+              <div className="fixed inset-0 z-[9999] bg-black/45 backdrop-blur-[2px] flex items-center justify-center p-4">
+                <div className="w-full max-w-md rounded-3xl bg-white border border-red-100 shadow-[0_20px_60px_rgba(15,23,42,0.18)] overflow-hidden">
+                  <div className="px-5 py-4 border-b border-red-100 bg-gradient-to-r from-red-50 to-white flex items-start gap-3">
+                    <div className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-red-100 text-red-600">
+                      <span className="material-symbols-outlined">warning</span>
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-lg font-extrabold text-slate-900">Xác nhận xóa sản phẩm</h3>
+                      <p className="mt-1 text-sm text-slate-500">Thao tác này sẽ xóa sản phẩm khỏi danh sách quản lý.</p>
+                    </div>
+                    <button type="button" onClick={cancelDeleteProduct} className="rounded-full p-1 text-slate-400 hover:bg-white hover:text-slate-600">
+                      <span className="material-symbols-outlined text-[20px]">close</span>
+                    </button>
+                  </div>
+
+                  <div className="px-5 py-5 space-y-4">
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                      <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-400">Sản phẩm sắp xóa</p>
+                      <p className="mt-1 text-base font-extrabold text-slate-900">{deleteTarget.product_name}</p>
+                      <p className="mt-1 text-sm text-slate-500">Bạn có chắc chắn muốn xóa sản phẩm này không?</p>
+                    </div>
+
+                    <div className="flex items-center justify-end gap-3">
+                      <button
+                        type="button"
+                        onClick={cancelDeleteProduct}
+                        disabled={deletingProduct}
+                        className="rounded-2xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                      >
+                        Không
+                      </button>
+                      <button
+                        type="button"
+                        onClick={confirmDeleteProduct}
+                        disabled={deletingProduct}
+                        className="rounded-2xl bg-red-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-red-700 disabled:opacity-50"
+                      >
+                        {deletingProduct ? 'Đang xóa...' : 'Có, xóa sản phẩm'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {showProductModal && (
+              <div className="fixed inset-0 z-[9999] bg-black/40 flex items-center justify-center p-4">
+                <div className="w-full max-w-xl rounded-2xl bg-white border border-amber-100 shadow-xl overflow-hidden">
+                  <div className="px-5 py-4 border-b border-amber-100 flex items-center justify-between">
+                    <h3 className="text-lg font-extrabold text-slate-900">{editingProductId ? 'Sửa sản phẩm' : 'Thêm sản phẩm mới'}</h3>
+                    <button type="button" onClick={() => setShowProductModal(false)} className="p-1 rounded hover:bg-slate-100">
+                      <span className="material-symbols-outlined">close</span>
+                    </button>
+                  </div>
+
+                  <form onSubmit={submitProductForm} className="p-5 space-y-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1">Tên sản phẩm</label>
+                      <input
+                        className="w-full rounded-xl border border-amber-200 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-amber-200"
+                        value={productForm.product_name}
+                        onChange={(e) => handleProductFormChange('product_name', e.target.value)}
+                        placeholder="Nhập tên sản phẩm"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-600 mb-1">Danh mục</label>
+                        <select
+                          className="w-full rounded-xl border border-amber-200 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-amber-200"
+                          value={productForm.category_id}
+                          onChange={(e) => handleProductFormChange('category_id', e.target.value)}
+                        >
+                          <option value="">-- Chọn danh mục --</option>
+                          {formCategories.map((c) => (
+                            <option key={c.category_id} value={c.category_id}>
+                              {c.category_name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-600 mb-1">Trạng thái</label>
+                        <select
+                          className="w-full rounded-xl border border-amber-200 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-amber-200"
+                          value={productForm.is_available}
+                          onChange={(e) => handleProductFormChange('is_available', Number(e.target.value))}
+                        >
+                          <option value={1}>Đang bán</option>
+                          <option value={0}>Ngừng bán</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-600 mb-1">Giá gốc</label>
+                        <input
+                          type="number"
+                          min="0"
+                          className="w-full rounded-xl border border-amber-200 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-amber-200"
+                          value={productForm.base_price}
+                          onChange={(e) => handleProductFormChange('base_price', e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-600 mb-1">Giá bán</label>
+                        <input
+                          type="number"
+                          min="0"
+                          className="w-full rounded-xl border border-amber-200 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-amber-200"
+                          value={productForm.sale_price}
+                          onChange={(e) => handleProductFormChange('sale_price', e.target.value)}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1">URL hình ảnh</label>
+                      <input
+                        className="w-full rounded-xl border border-amber-200 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-amber-200"
+                        value={productForm.image_url}
+                        onChange={(e) => handleProductFormChange('image_url', e.target.value)}
+                        placeholder="https://..."
+                      />
+                    </div>
+
+                    <div className="pt-2 flex items-center justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowProductModal(false)}
+                        className="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 text-sm font-bold"
+                      >
+                        Hủy
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={savingProduct}
+                        className="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-bold disabled:opacity-50"
+                      >
+                        {savingProduct ? 'Đang lưu...' : editingProductId ? 'Lưu thay đổi' : 'Thêm sản phẩm'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+          </ModalPortal>
         </div>
       </main>
     </div>

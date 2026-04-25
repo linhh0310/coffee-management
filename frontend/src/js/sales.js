@@ -3,6 +3,7 @@ import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import Sidebar from '../components/Sidebar';
+import qrPaymentImage from '../assets/qr-payment.jpg';
 
 function formatVnd(value) {
   const n = Number(value || 0);
@@ -92,19 +93,9 @@ function summarizeOptions(modal) {
   return parts.join(' • ');
 }
 
-const BANK_BIN = '970422';
-const BANK_ACCOUNT = '1900123456789';
-const BANK_ACCOUNT_NAME = 'COFFEE MANAGEMENT';
-
-function buildVietQrUrl({ amount, orderId }) {
-  const transferContent = `THANH TOAN HD${String(orderId || '').padStart(5, '0')}`;
-  const params = new URLSearchParams({
-    amount: String(Math.round(Number(amount || 0))),
-    addInfo: transferContent,
-    accountName: BANK_ACCOUNT_NAME
-  });
-  return `https://img.vietqr.io/image/${BANK_BIN}-${BANK_ACCOUNT}-compact2.png?${params.toString()}`;
-}
+const BANK_NAME = 'MB Bank';
+const BANK_ACCOUNT = '0352335204';
+const BANK_ACCOUNT_NAME = 'PHAM THUY LINH';
 
 function escapeHtml(v) {
   return String(v ?? '')
@@ -355,8 +346,6 @@ function Sales() {
   const navigate = useNavigate();
 
   const [products, setProducts] = useState([]);
-  const [tables, setTables] = useState([]);
-  const [recentOrders, setRecentOrders] = useState([]);
   const [comboAi, setComboAi] = useState(null);
 
   const [loading, setLoading] = useState(true);
@@ -410,16 +399,12 @@ function Sales() {
         setLoading(true);
         setErrorMessage('');
 
-        const [pRes, tRes, rRes, comboRes] = await Promise.all([
+        const [pRes, comboRes] = await Promise.all([
           axios.get('/api/products', { headers }),
-          axios.get('/api/tables', { headers }),
-          axios.get('/api/orders/recent', { headers }),
           axios.get('/api/ai/combo-suggestions?days=60&persist=0', { headers }).catch(() => ({ data: null }))
         ]);
 
         setProducts(pRes.data || []);
-        setTables(tRes.data || []);
-        setRecentOrders(rRes.data || []);
         setComboAi(comboRes.data || null);
       } catch (err) {
         const status = err?.response?.status;
@@ -706,7 +691,7 @@ function Sales() {
     if (paymentMethod === 'transfer') {
       setTransferOrder({
         ...pendingInvoice,
-        qrUrl: buildVietQrUrl({ amount: pendingInvoice.total, orderId: pendingInvoice.orderId })
+        qrUrl: qrPaymentImage
       });
     } else {
       setTransferOrder({
@@ -1249,6 +1234,42 @@ function Sales() {
                         <p className="text-xs font-bold mt-1">Chuyển khoản</p>
                       </button>
                     </div>
+
+                    {paymentMethod === 'transfer' && (
+                      <div className="mt-4 overflow-hidden rounded-[28px] border border-orange-200/70 bg-gradient-to-br from-[#fffdf8] via-[#fff7ed] to-[#fffaf5] p-4 shadow-[0_16px_40px_rgba(191,122,24,0.12)]">
+                        <div className="rounded-[24px] border border-white/80 bg-white/80 p-4 backdrop-blur-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.85)]">
+                          <div className="text-center">
+                            <p className="text-[10px] font-extrabold uppercase tracking-[0.22em] text-[#c07a18]">Thanh toán QR</p>
+                            <p className="mt-1 text-sm font-semibold text-slate-700">
+                              Khách quét mã bên dưới để chuyển khoản nhanh
+                            </p>
+                          </div>
+
+                          <div className="mt-4 flex justify-center">
+                            <div className="rounded-[30px] border border-orange-100 bg-white p-4 shadow-[0_14px_32px_rgba(15,23,42,0.08)]">
+                              <img
+                                src={qrPaymentImage}
+                                alt="Mã QR chuyển khoản"
+                                className="h-64 w-64 rounded-[22px] object-contain"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="mt-4 rounded-[22px] border border-orange-100/80 bg-white px-4 py-3 shadow-sm">
+                            <div className="grid grid-cols-[96px_1fr] gap-y-2 text-[12px] leading-5">
+                              <span className="font-medium text-slate-500">Ngân hàng</span>
+                              <span className="font-semibold text-slate-900">{BANK_NAME}</span>
+                              <span className="font-medium text-slate-500">Số tài khoản</span>
+                              <span className="font-semibold tracking-[0.08em] text-slate-900">{BANK_ACCOUNT}</span>
+                              <span className="font-medium text-slate-500">Chủ tài khoản</span>
+                              <span className="font-semibold text-slate-900">{BANK_ACCOUNT_NAME}</span>
+                              <span className="font-medium text-slate-500">Nội dung</span>
+                              <span className="font-semibold text-[#b87414]">THANH TOAN HD{String(invoiceModal.orderId || 'TEMP').padStart(5, '0')}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ) : null}
               </div>
@@ -1407,12 +1428,36 @@ function Sales() {
             </div>
 
             {transferOrder.paymentMethod === 'Chuyển khoản' && transferOrder.qrUrl ? (
-              <div className="mt-4 rounded-2xl border border-orange-100 p-4 bg-white flex items-center justify-center">
-                <img
-                  src={transferOrder.qrUrl}
-                  alt="VietQR"
-                  className="w-72 h-72 object-contain"
-                />
+              <div className="mt-4 overflow-hidden rounded-[30px] border border-orange-200/70 bg-gradient-to-br from-[#fffdf8] via-[#fff7ed] to-[#fffaf5] p-5 shadow-[0_18px_42px_rgba(191,122,24,0.14)]">
+                <div className="rounded-[26px] border border-white/80 bg-white/85 p-4 backdrop-blur-sm">
+                  <div className="text-center">
+                    <p className="text-[10px] font-extrabold uppercase tracking-[0.22em] text-[#c07a18]">Quét mã để thanh toán</p>
+                    <p className="mt-1 text-sm text-slate-600">Vui lòng kiểm tra đúng số tiền và nội dung chuyển khoản trước khi xác nhận.</p>
+                  </div>
+
+                  <div className="mt-4 flex justify-center">
+                    <div className="rounded-[32px] border border-orange-100 bg-white p-4 shadow-[0_16px_36px_rgba(15,23,42,0.08)]">
+                      <img
+                        src={qrPaymentImage}
+                        alt="QR thanh toán"
+                        className="h-72 w-72 rounded-[24px] object-contain"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="mt-4 rounded-[22px] border border-orange-100/80 bg-white px-4 py-3 shadow-sm">
+                    <div className="grid grid-cols-[110px_1fr] gap-y-2 text-[12px] leading-5">
+                      <span className="font-medium text-slate-500">Ngân hàng</span>
+                      <span className="font-semibold text-slate-900">{BANK_NAME}</span>
+                      <span className="font-medium text-slate-500">Số tài khoản</span>
+                      <span className="font-semibold tracking-[0.08em] text-slate-900">{BANK_ACCOUNT}</span>
+                      <span className="font-medium text-slate-500">Chủ tài khoản</span>
+                      <span className="font-semibold text-slate-900">{BANK_ACCOUNT_NAME}</span>
+                      <span className="font-medium text-slate-500">Nội dung CK</span>
+                      <span className="font-semibold text-[#b87414]">THANH TOAN HD{String(transferOrder.orderId || '').padStart(5, '0')}</span>
+                    </div>
+                  </div>
+                </div>
               </div>
             ) : (
               <div className="mt-4 rounded-2xl border border-orange-100 p-4 bg-orange-50 text-left text-sm text-slate-700">

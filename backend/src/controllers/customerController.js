@@ -15,6 +15,7 @@ function normalizePhone(phone) {
 }
 
 let authColumnsEnsured = false;
+let profileColumnsEnsured = false;
 const resetOtpStore = new Map();
 
 async function ensureCustomerAuthColumns() {
@@ -36,6 +37,27 @@ async function ensureCustomerAuthColumns() {
   }
 
   authColumnsEnsured = true;
+}
+
+async function ensureCustomerProfileColumns() {
+  if (profileColumnsEnsured) return;
+
+  const [cols] = await db.query(
+    `
+      SELECT COLUMN_NAME
+      FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'customers'
+        AND COLUMN_NAME = 'birth_date'
+      LIMIT 1
+    `
+  );
+
+  if (!cols.length) {
+    await db.query('ALTER TABLE customers ADD COLUMN birth_date DATE NULL');
+  }
+
+  profileColumnsEnsured = true;
 }
 
 function maskPhone(phone) {
@@ -166,9 +188,11 @@ exports.loginCustomer = async (req, res) => {
 
 exports.getMyCustomerProfile = async (req, res) => {
   try {
+    await ensureCustomerProfileColumns();
+
     const [rows] = await db.query(
       `
-      SELECT customer_id, full_name, phone, email, points, total_spent, tier, status, updated_at
+      SELECT customer_id, full_name, phone, email, birth_date, points, total_spent, tier, status, updated_at
       FROM customers
       WHERE customer_id = ?
       LIMIT 1
@@ -189,6 +213,7 @@ exports.getMyCustomerProfile = async (req, res) => {
         full_name: customer.full_name,
         phone: customer.phone,
         email: customer.email,
+        birth_date: customer.birth_date,
         points: Number(customer.points || 0),
         total_spent: Number(customer.total_spent || 0),
         tier: customer.tier || calcTier(customer.points),
@@ -204,21 +229,23 @@ exports.updateMyCustomerProfile = async (req, res) => {
   const customerId = Number(req.user?.id);
   const fullName = String(req.body?.full_name || '').trim();
   const emailRaw = String(req.body?.email || '').trim();
+  const phoneRaw = String(req.body?.phone || '').trim();
   const birthDate = String(req.body?.birth_date || '').trim();
 
   if (!customerId) return res.status(401).json({ message: 'Token không hợp lệ' });
   if (!fullName) return res.status(400).json({ message: 'Họ tên là bắt buộc' });
 
   const email = emailRaw || null;
-  const normalizedBirthDate = /^\d{4}-\d{2}-\d{2}$/.test(birthDate) ? birthDate : null;
+  const phone = phoneRaw || null;
+  const normalizedBirthDate = birthDate === '' ? null : /^\d{4}-\d{2}-\d{2}$/.test(birthDate) ? birthDate : '__INVALID__';
 
   try {
-    await db.query('ALTER TABLE customers ADD COLUMN IF NOT EXISTS birth_date DATE NULL');
-  } catch (_err) {
-    // ignore if DB does not support IF NOT EXISTS or column already exists
-  }
+    await ensureCustomerProfileColumns();
 
-  try {
+    if (normalizedBirthDate === '__INVALID__') {
+      return res.status(400).json({ message: 'Ngày sinh không hợp lệ' });
+    }
+
     if (email) {
       const [dupEmail] = await db.query(
         'SELECT customer_id FROM customers WHERE email = ? AND customer_id <> ? LIMIT 1',
@@ -227,11 +254,23 @@ exports.updateMyCustomerProfile = async (req, res) => {
       if (dupEmail.length) return res.status(400).json({ message: 'Email đã được sử dụng bởi tài khoản khác' });
     }
 
+    if (phone) {
+      const [dupPhone] = await db.query(
+        `SELECT customer_id
+         FROM customers
+         WHERE REPLACE(REPLACE(REPLACE(IFNULL(phone, ''), ' ', ''), '.', ''), '-', '') = REPLACE(REPLACE(REPLACE(?, ' ', ''), '.', ''), '-', '')
+           AND customer_id <> ?
+         LIMIT 1`,
+        [phone, customerId]
+      );
+      if (dupPhone.length) return res.status(400).json({ message: 'Số điện thoại đã được sử dụng bởi tài khoản khác' });
+    }
+
     await db.query(
       `UPDATE customers
-       SET full_name = ?, email = ?, birth_date = COALESCE(?, birth_date)
+       SET full_name = ?, phone = ?, email = ?, birth_date = ?
        WHERE customer_id = ?`,
-      [fullName, email, normalizedBirthDate, customerId]
+      [fullName, phone, email, normalizedBirthDate, customerId]
     );
 
     const [rows] = await db.query(

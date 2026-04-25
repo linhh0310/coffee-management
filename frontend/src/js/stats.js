@@ -422,54 +422,94 @@ export default function Stats() {
                 </div>
               </section>
 
-              <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2 bg-white border border-[#f0dcc6] rounded-2xl p-5 shadow-[0_8px_20px_rgba(74,46,20,0.05)]">
-                  <h3 className="text-[15px] font-medium text-[#2f2117] mb-3">Top 5 món bán chạy</h3>
+              <section className="grid grid-cols-1 gap-4 xl:grid-cols-[1.55fr_0.9fr]">
+                <div className="overflow-hidden rounded-[22px] border border-[#efdfd2] bg-white shadow-[0_10px_24px_rgba(74,46,20,0.06)]">
+                  <div className="flex items-center justify-between gap-3 border-b border-[#f2e6db] px-4 py-3.5">
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#b07a4f]">Best sellers</p>
+                      <h3 className="mt-1 text-[19px] font-extrabold text-[#2f2117]">Top 5 món bán chạy</h3>
+                    </div>
+                    <div className="rounded-full bg-[#fff4e7] px-3 py-1 text-[11px] font-bold text-[#c97a1f]">
+                      {(data.topProducts || []).slice(0, 5).length} món
+                    </div>
+                  </div>
+
                   {(data.topProducts || []).length > 0 ? (
-                    <div className="space-y-2.5">
+                    <div className="p-3.5 space-y-2.5">
                       {(data.topProducts || []).slice(0, 5).map((item, idx) => {
                         const qty = Number(item.qty || 0);
                         const revenue = Number(item.revenue || 0);
+                        const rankStyles = [
+                          'bg-gradient-to-br from-[#ffd66b] to-[#e9a926] text-[#6a3b00] ring-2 ring-[#ffe8a6]',
+                          'bg-gradient-to-br from-[#edf2f7] to-[#b9c4d1] text-[#485467] ring-2 ring-[#e5ebf2]',
+                          'bg-gradient-to-br from-[#f4c8a4] to-[#c97a42] text-[#5a2f10] ring-2 ring-[#f8dfca]'
+                        ];
+                        const rowStyles = [
+                          'border-[#f3d79b] bg-gradient-to-r from-[#fff8e8] to-white',
+                          'border-[#dde4eb] bg-gradient-to-r from-[#f9fbfd] to-white',
+                          'border-[#efd7c7] bg-gradient-to-r from-[#fff8f2] to-white'
+                        ];
+                        const rankClass = rankStyles[idx] || 'bg-[#f7efe7] text-[#9b6b43]';
+                        const rowClass = rowStyles[idx] || 'border-[#f1e6dc] bg-gradient-to-r from-[#fffaf6] to-white';
                         return (
                           <div
                             key={`${item.product_name}-${idx}`}
-                            className="flex items-center justify-between rounded-xl bg-[#f8f9fb] border border-slate-100 px-3.5 py-2.5"
+                            className={`rounded-[16px] border p-3.5 ${rowClass}`}
                           >
-                            <div className="flex items-center gap-3 min-w-0">
-                              <div className="size-6 rounded-full bg-[#fff3dd] text-[#d48a2f] text-[11px] font-medium flex items-center justify-center shrink-0">
-                                {idx + 1}
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex min-w-0 items-start gap-3">
+                                <div className={`mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full text-[12px] font-extrabold shadow-sm ${rankClass}`}>
+                                  {idx + 1}
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="truncate text-[14px] font-bold text-[#2f2117]">{item.product_name}</p>
+                                  <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[#8a6d57]">
+                                    <span>{qty} đã bán</span>
+                                    <span className="font-semibold text-[#d07a1d]">{formatVnd(revenue)}</span>
+                                  </div>
+                                </div>
                               </div>
-                              <div className="min-w-0">
-                                <p className="text-[13px] leading-5 font-normal text-[#1f2937] truncate">{item.product_name}</p>
-                                <p className="text-[11px] leading-4 text-[#6b7280]">{qty} đã bán</p>
+                              <div className="rounded-full bg-white px-2.5 py-1 text-[10px] font-semibold text-[#7b5b43] shadow-[0_4px_10px_rgba(0,0,0,0.04)]">
+                                #{idx + 1}
                               </div>
                             </div>
-                            <p className="text-[12px] font-medium text-[#d97706] whitespace-nowrap pl-3">{formatVnd(revenue)}</p>
                           </div>
                         );
                       })}
                     </div>
                   ) : (
-                    <div className="h-32 flex items-center justify-center text-[12px] text-slate-500">Chưa có dữ liệu top món</div>
+                    <div className="flex h-36 items-center justify-center px-4 text-[12px] text-slate-500">Chưa có dữ liệu top món</div>
                   )}
                 </div>
 
-                <div className="bg-white/95 border border-[#f0dcc6] rounded-3xl p-6 shadow-[0_12px_30px_rgba(74,46,20,0.08)]">
-                  <h3 className="text-xl font-semibold text-[#3a291c] mb-4 flex items-center gap-2"><span className="material-symbols-outlined text-[20px] text-[#b87414]">analytics</span>Thông số nhanh</h3>
-                  <div className="space-y-4 text-left">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-800">Ngày bán ổn nhất</p>
-                      <p className="text-slate-600">{data.quickStats?.busiestDay}</p>
+                <div className="overflow-hidden rounded-[22px] border border-[#efdfd2] bg-white shadow-[0_10px_24px_rgba(74,46,20,0.06)]">
+                  <div className="border-b border-[#f2e6db] px-4 py-3.5">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#b07a4f]">Quick overview</p>
+                    <h3 className="mt-1 flex items-center gap-2 text-[19px] font-extrabold text-[#2f2117]">
+                      <span className="material-symbols-outlined text-[17px] text-[#b87414]">analytics</span>
+                      Thông số nhanh
+                    </h3>
+                  </div>
+
+                  <div className="grid gap-2.5 p-3.5">
+                    <div className="rounded-[15px] border border-[#f1e6dc] bg-[#fffaf6] p-3.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.13em] text-[#a17755]">Ngày bán ổn nhất</p>
+                      <p className="mt-1.5 text-[20px] font-black text-[#2f2117]">{data.quickStats?.busiestDay || '-'}</p>
+                      <p className="mt-1 text-[11px] text-[#8c715b]">Thời điểm có doanh số tốt nhất trong kỳ thống kê.</p>
                     </div>
-                    <div>
-                      <p className="text-sm font-semibold text-slate-800">Khách hàng mới (30 ngày)</p>
-                      <p className="text-slate-600">
-                        {data.quickStats?.newCustomers30d} khách ({data.quickStats?.newCustomersGrowthPct}% so với 30 ngày trước)
+
+                    <div className="rounded-[15px] border border-[#f1e6dc] bg-[#fffaf6] p-3.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.13em] text-[#a17755]">Khách hàng mới 30 ngày</p>
+                      <p className="mt-1.5 text-[18px] font-black text-[#2f2117]">{data.quickStats?.newCustomers30d || 0} khách</p>
+                      <p className="mt-1 text-[11px] text-[#8c715b]">
+                        {data.quickStats?.newCustomersGrowthPct}% so với 30 ngày trước
                       </p>
                     </div>
-                    <div>
-                      <p className="text-sm font-semibold text-slate-800">Cảnh báo kho</p>
-                      <p className="text-slate-600">{data.quickStats?.lowStock} nguyên liệu sắp hết hàng</p>
+
+                    <div className="rounded-[15px] border border-[#f1e6dc] bg-[#fffaf6] p-3.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.13em] text-[#a17755]">Cảnh báo kho</p>
+                      <p className="mt-1.5 text-[18px] font-black text-[#2f2117]">{data.quickStats?.lowStock || 0} nguyên liệu</p>
+                      <p className="mt-1 text-[11px] text-[#8c715b]">Đang ở ngưỡng sắp hết hàng, cần theo dõi nhập thêm.</p>
                     </div>
                   </div>
                 </div>
