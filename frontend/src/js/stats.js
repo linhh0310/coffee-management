@@ -170,25 +170,26 @@ export default function Stats() {
       <Sidebar />
 
       <main className="admin-main">
-        <header className="admin-header">
-          <div className="text-left">
-            <h2 className="text-xl font-bold text-[#3a291c]">Thống kê doanh thu</h2>
-            <p className="text-xs text-[#8f725b]">Chi nhánh chính - Trung tâm phân tích</p>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="bg-white/90 border border-[#f0dcc6] rounded-xl p-1 flex shadow-sm">
-              {PERIODS.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => setPeriod(p.id)}
-                  className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition ${
-                    period === p.id ? 'bg-[#b87414] text-white shadow-sm' : 'text-[#7a5a3a] hover:bg-[#fff5e9]'
-                  }`}
-                >
-                  {p.label}
-                </button>
-              ))}
+        <header className="admin-header rounded-2xl border border-amber-100 bg-gradient-to-r from-[#fffaf2] via-white to-[#fff5e7] px-5 py-4 shadow-sm">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="text-left">
+              <h2 className="text-xl font-semibold text-slate-900">Thống kê doanh thu</h2>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="flex rounded-xl border border-amber-200 bg-white/80 p-1 shadow-sm">
+                {PERIODS.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => setPeriod(p.id)}
+                    className={`rounded-lg px-4 py-1.5 text-sm font-semibold transition ${
+                      period === p.id ? 'bg-[#b87414] text-white shadow-sm' : 'text-[#7a5a3a] hover:bg-[#fff5e9]'
+                    }`}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         </header>
@@ -206,41 +207,43 @@ export default function Stats() {
 
           {!loading && !errorMessage && (
             <>
-              <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-                <div className="bg-white/95 border border-[#f0dcc6] rounded-2xl p-5 shadow-[0_8px_24px_rgba(74,46,20,0.07)]">
-                  <div className="flex items-center justify-between">
-                    <p className="text-[#8f725b] text-sm font-semibold">Tổng doanh thu</p>
-                    <span className="material-symbols-outlined text-[18px] text-[#b87414]">payments</span>
+              <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+                <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm">
+                  <div className="mb-3 flex items-center justify-between">
+                    <div className="rounded-xl bg-[#fdf0df] p-2 text-[#b87414]"><span className="material-symbols-outlined text-[18px]">payments</span></div>
                   </div>
-                  <p className="text-2xl font-bold text-[#2f2117] mt-2 tabular-nums">{formatVnd(data.overview?.totalRevenue)}</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Tổng doanh thu</p>
+                  <p className="mt-1.5 text-2xl font-semibold text-slate-900 tabular-nums">{formatVnd(data.overview?.totalRevenue)}</p>
                 </div>
-                <div className="bg-white/95 border border-[#f0dcc6] rounded-2xl p-5 shadow-[0_8px_24px_rgba(74,46,20,0.07)]">
-                  <div className="flex items-center justify-between">
-                    <p className="text-[#8f725b] text-sm font-semibold">Tổng đơn đã thanh toán</p>
-                    <span className="material-symbols-outlined text-[18px] text-[#b87414]">receipt_long</span>
+                <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm">
+                  <div className="mb-3 flex items-center justify-between">
+                    <div className="rounded-xl bg-[#edf4ff] p-2 text-[#3d6edb]"><span className="material-symbols-outlined text-[18px]">receipt_long</span></div>
                   </div>
-                  <p className="text-2xl font-bold text-[#2f2117] mt-2 tabular-nums">{Number(data.overview?.totalOrders || 0).toLocaleString('vi-VN')}</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Tổng đơn đã thanh toán</p>
+                  <p className="mt-1.5 text-2xl font-semibold text-slate-900 tabular-nums">{Number(data.overview?.totalOrders || 0).toLocaleString('vi-VN')}</p>
                 </div>
-                <div className="bg-white/95 border border-[#f0dcc6] rounded-2xl p-5 shadow-[0_8px_24px_rgba(74,46,20,0.07)]">
-                  <div className="flex items-center justify-between">
-                    <p className="text-[#8f725b] text-sm font-semibold">Giá trị đơn hàng TB</p>
-                    <span className="material-symbols-outlined text-[18px] text-[#b87414]">insights</span>
+                <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm">
+                  <div className="mb-3 flex items-center justify-between">
+                    <div className="rounded-xl bg-[#fbf2e7] p-2 text-[#9d6b2c]"><span className="material-symbols-outlined text-[18px]">insights</span></div>
                   </div>
-                  <p className="text-2xl font-bold text-[#2f2117] mt-2 tabular-nums">{formatVnd(data.overview?.avgOrderValue)}</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Giá trị đơn hàng TB</p>
+                  <p className="mt-1.5 text-2xl font-semibold text-slate-900 tabular-nums">{formatVnd(data.overview?.avgOrderValue)}</p>
                 </div>
-                <div className="bg-white/95 border border-[#f0dcc6] rounded-2xl p-5 shadow-[0_8px_24px_rgba(74,46,20,0.07)]">
-                  <div className="flex items-center justify-between">
-                    <p className="text-[#8f725b] text-sm font-semibold">Số lượng khách hàng</p>
-                    <span className="material-symbols-outlined text-[18px] text-[#b87414]">group</span>
+                <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm">
+                  <div className="mb-3 flex items-center justify-between">
+                    <div className="rounded-xl bg-[#eefaf0] p-2 text-[#2f8f57]"><span className="material-symbols-outlined text-[18px]">group</span></div>
                   </div>
-                  <p className="text-2xl font-bold text-[#2f2117] mt-2 tabular-nums">{Number(data.overview?.customerCount || 0).toLocaleString('vi-VN')}</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Số lượng khách hàng</p>
+                  <p className="mt-1.5 text-2xl font-semibold text-slate-900 tabular-nums">{Number(data.overview?.customerCount || 0).toLocaleString('vi-VN')}</p>
                 </div>
               </section>
 
-              <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="bg-white/95 border border-[#f0dcc6] rounded-3xl p-6 shadow-[0_12px_30px_rgba(74,46,20,0.08)] overflow-hidden">
-                  <h3 className="text-lg font-semibold text-[#3a291c] mb-4">{activePeriod.chartTitle}</h3>
-                  <div className="h-64 border border-slate-200 rounded-xl p-4 overflow-hidden bg-white">
+              <section className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm overflow-hidden">
+                  <div className="mb-4">
+                    <h3 className="text-base font-semibold text-slate-900">{activePeriod.chartTitle}</h3>
+                  </div>
+                  <div className="h-64 rounded-xl border border-slate-200 bg-white p-4 overflow-hidden">
                     {trendData.length > 0 ? (
                       <div className="h-full grid grid-cols-[44px_minmax(0,1fr)] gap-3">
                         <div className="h-full flex flex-col justify-between text-[10px] text-slate-500">
@@ -314,9 +317,11 @@ export default function Stats() {
                   </div>
                 </div>
 
-                <div className="bg-white/95 border border-[#f0dcc6] rounded-3xl p-6 shadow-[0_12px_30px_rgba(74,46,20,0.08)] overflow-hidden">
-                  <h3 className="text-lg font-semibold text-[#3a291c] mb-4">{activePeriod.orderTitle}</h3>
-                  <div className="h-64 border border-slate-200 rounded-xl p-4 overflow-hidden bg-white">
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm overflow-hidden">
+                  <div className="mb-4">
+                    <h3 className="text-base font-semibold text-slate-900">{activePeriod.orderTitle}</h3>
+                  </div>
+                  <div className="h-64 rounded-xl border border-slate-200 bg-white p-4 overflow-hidden">
                     {trendData.length > 0 ? (
                       <div className="h-full grid grid-cols-[44px_minmax(0,1fr)] gap-3">
                         <div className="h-full flex flex-col justify-between text-[10px] text-slate-500">
@@ -423,13 +428,13 @@ export default function Stats() {
               </section>
 
               <section className="grid grid-cols-1 gap-4 xl:grid-cols-[1.55fr_0.9fr]">
-                <div className="overflow-hidden rounded-[22px] border border-[#efdfd2] bg-white shadow-[0_10px_24px_rgba(74,46,20,0.06)]">
-                  <div className="flex items-center justify-between gap-3 border-b border-[#f2e6db] px-4 py-3.5">
+                <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                  <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3.5">
                     <div>
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#b07a4f]">Best sellers</p>
-                      <h3 className="mt-1 text-[19px] font-extrabold text-[#2f2117]">Top 5 món bán chạy</h3>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Best sellers</p>
+                      <h3 className="mt-1.5 text-base font-semibold text-slate-900">Top 5 món bán chạy</h3>
                     </div>
-                    <div className="rounded-full bg-[#fff4e7] px-3 py-1 text-[11px] font-bold text-[#c97a1f]">
+                    <div className="rounded-full bg-amber-50 px-3 py-1 text-[11px] font-semibold text-amber-700">
                       {(data.topProducts || []).slice(0, 5).length} món
                     </div>
                   </div>
@@ -482,11 +487,11 @@ export default function Stats() {
                   )}
                 </div>
 
-                <div className="overflow-hidden rounded-[22px] border border-[#efdfd2] bg-white shadow-[0_10px_24px_rgba(74,46,20,0.06)]">
-                  <div className="border-b border-[#f2e6db] px-4 py-3.5">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#b07a4f]">Quick overview</p>
-                    <h3 className="mt-1 flex items-center gap-2 text-[19px] font-extrabold text-[#2f2117]">
-                      <span className="material-symbols-outlined text-[17px] text-[#b87414]">analytics</span>
+                <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                  <div className="border-b border-slate-200 px-4 py-3.5">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Quick overview</p>
+                    <h3 className="mt-1.5 flex items-center gap-2 text-base font-semibold text-slate-900">
+                      <span className="material-symbols-outlined text-[16px] text-[#b87414]">analytics</span>
                       Thông số nhanh
                     </h3>
                   </div>

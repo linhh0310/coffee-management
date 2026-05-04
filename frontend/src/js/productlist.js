@@ -196,6 +196,49 @@ export default function ProductList() {
       .slice(0, 6);
   }, [ingredients]);
 
+  const menuDashboard = useMemo(() => {
+    const list = Array.isArray(products) ? products : [];
+    const totalProducts = list.length;
+    const sellingProducts = list.filter((item) => Number(item.is_available) === 1).length;
+    const pausedProducts = totalProducts - sellingProducts;
+    const pricedProducts = list
+      .map((item) => Number(item.sale_price ?? item.base_price ?? 0))
+      .filter((price) => Number.isFinite(price) && price > 0);
+    const averagePrice = pricedProducts.length
+      ? pricedProducts.reduce((sum, price) => sum + price, 0) / pricedProducts.length
+      : 0;
+
+    const categoryMap = new Map();
+    list.forEach((item) => {
+      const categoryName = String(item.category_name || 'Chưa phân loại').trim() || 'Chưa phân loại';
+      const current = categoryMap.get(categoryName) || { name: categoryName, count: 0, available: 0 };
+      current.count += 1;
+      if (Number(item.is_available) === 1) current.available += 1;
+      categoryMap.set(categoryName, current);
+    });
+
+    const categories = Array.from(categoryMap.values()).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+    const topCategory = categories[0] || null;
+    const highestPriceProduct = list.reduce((best, item) => {
+      const price = Number(item.sale_price ?? item.base_price ?? 0);
+      if (!best || price > best.price) {
+        return { name: item.product_name, price };
+      }
+      return best;
+    }, null);
+
+    return {
+      totalProducts,
+      sellingProducts,
+      pausedProducts,
+      averagePrice,
+      totalCategories: categories.length,
+      topCategory,
+      highestPriceProduct,
+      categories: categories.slice(0, 5)
+    };
+  }, [products]);
+
   const totalPages = Math.max(1, Math.ceil(filteredProducts.length / pageSize));
   const pageItems = useMemo(() => {
     const start = (page - 1) * pageSize;
@@ -1091,10 +1134,74 @@ export default function ProductList() {
 
               {activeTab === 'menu' && (
               <>
-              {/* Menu table / grid */}
-              <section className="rounded-2xl border border-amber-100 bg-white shadow-sm overflow-hidden">
+              <section className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.7fr)_300px] gap-4">
+                <div className="rounded-2xl border border-amber-100 bg-gradient-to-br from-[#fffaf2] via-white to-[#fff5e7] p-4 shadow-sm">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div>
+                      <h2 className="text-xl font-semibold text-slate-900">Tổng quan quản lý menu</h2>
+                    </div>
+                    <div className="rounded-xl border border-amber-200 bg-white/80 px-3.5 py-2.5 text-[13px] shadow-sm">
+                      <p className="text-slate-500">Danh mục nổi bật</p>
+                      <p className="mt-1 text-base font-semibold text-slate-900">{menuDashboard.topCategory?.name || 'Chưa có dữ liệu'}</p>
+                      <p className="text-[11px] text-amber-700">{menuDashboard.topCategory ? `${menuDashboard.topCategory.count} sản phẩm` : 'Hãy thêm sản phẩm để bắt đầu'}</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2.5">
+                    <div className="rounded-xl border border-slate-200 bg-white p-3.5">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Tổng sản phẩm</p>
+                      <p className="mt-1.5 text-2xl font-semibold text-slate-900">{menuDashboard.totalProducts}</p>
+                      <p className="mt-1 text-[11px] text-slate-500">Số món hiện có trong thực đơn</p>
+                    </div>
+                    <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-3.5">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">Đang bán</p>
+                      <p className="mt-1.5 text-2xl font-semibold text-emerald-800">{menuDashboard.sellingProducts}</p>
+                      <p className="mt-1 text-[11px] text-emerald-700">Sản phẩm đang hiển thị để bán</p>
+                    </div>
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-600">Ngừng bán</p>
+                      <p className="mt-1.5 text-2xl font-semibold text-slate-900">{menuDashboard.pausedProducts}</p>
+                      <p className="mt-1 text-[11px] text-slate-500">Món đã tạm ẩn hoặc ngừng kinh doanh</p>
+                    </div>
+                    <div className="rounded-xl border border-amber-100 bg-amber-50 p-3.5">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">Giá trung bình</p>
+                      <p className="mt-1.5 text-2xl font-semibold text-amber-800">{formatVnd(menuDashboard.averagePrice)}</p>
+                      <p className="mt-1 text-[11px] text-amber-700">Mức giá trung bình của thực đơn</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h3 className="text-base font-semibold text-slate-900">Thông tin nhanh</h3>
+                    </div>
+                    <div className="rounded-full bg-amber-100 p-1.5 text-amber-700">
+                      <span className="material-symbols-outlined text-[18px]">insights</span>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 space-y-2.5">
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5">
+                      <p className="text-[11px] text-slate-500">Tổng danh mục</p>
+                      <p className="mt-1 text-xl font-semibold text-slate-900">{menuDashboard.totalCategories}</p>
+                    </div>
+                    <div className="rounded-xl border border-amber-100 bg-amber-50 p-3.5">
+                      <p className="text-[11px] text-amber-700">Món có giá cao nhất</p>
+                      <p className="mt-1 font-semibold text-slate-900 line-clamp-2">{menuDashboard.highestPriceProduct?.name || 'Chưa có dữ liệu'}</p>
+                      <p className="mt-1.5 text-base font-semibold text-amber-800">{formatVnd(menuDashboard.highestPriceProduct?.price || 0)}</p>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.7fr)_300px] gap-4">
+                <div className="rounded-2xl border border-amber-100 bg-white shadow-sm overflow-hidden">
                 <div className="px-5 py-4 border-b border-amber-100 flex flex-wrap items-center justify-between gap-3">
-                  <h2 className="text-lg font-extrabold text-slate-900">Quản lý Thực đơn</h2>
+                  <div>
+                    <h2 className="text-lg font-extrabold text-slate-900">Quản lý Thực đơn</h2>
+                    <p className="mt-1 text-xs text-slate-500">Tìm kiếm, phân loại và cập nhật trạng thái món ngay trong một màn hình.</p>
+                  </div>
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
@@ -1337,6 +1444,44 @@ export default function ProductList() {
                     </button>
                   </div>
                 </div>
+              </div>
+
+              <aside className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm h-fit">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-base font-semibold text-slate-900">Top danh mục thực đơn</h3>
+                  </div>
+                  <span className="material-symbols-outlined text-[18px] text-amber-700">pie_chart</span>
+                </div>
+
+                <div className="mt-4 space-y-3">
+                  {menuDashboard.categories.length ? (
+                    menuDashboard.categories.map((category) => {
+                      const percentage = menuDashboard.totalProducts > 0
+                        ? Math.round((category.count / menuDashboard.totalProducts) * 100)
+                        : 0;
+                      return (
+                        <div key={category.name} className="space-y-1.5">
+                          <div className="flex items-center justify-between gap-3 text-[13px]">
+                            <div>
+                              <p className="font-semibold text-slate-900">{category.name}</p>
+                              <p className="text-[11px] text-slate-500">{category.available}/{category.count} món đang bán</p>
+                            </div>
+                            <span className="text-[11px] font-semibold text-amber-700">{percentage}%</span>
+                          </div>
+                          <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
+                            <div className="h-full rounded-full bg-gradient-to-r from-amber-400 to-amber-700" style={{ width: `${percentage}%` }} />
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-center text-[13px] text-slate-500">
+                      Chưa có dữ liệu danh mục để hiển thị dashboard.
+                    </div>
+                  )}
+                </div>
+              </aside>
               </section>
               </>
               )}

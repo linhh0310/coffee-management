@@ -92,8 +92,10 @@ function Dashboard() {
       <Sidebar />
 
       <main className="admin-main flex flex-col">
-        <header className="admin-header bg-gradient-to-r from-[#fff7ed] to-white border border-[#f1dec8] rounded-2xl px-6 py-4">
-          <h2 className="text-2xl md:text-3xl font-black text-[#3a291c] tracking-tight">Tổng quan hệ thống</h2>
+        <header className="admin-header rounded-2xl border border-amber-100 bg-gradient-to-r from-[#fffaf2] via-white to-[#fff5e7] px-5 py-4 shadow-sm">
+          <div>
+            <h2 className="text-xl font-semibold text-slate-900">Tổng quan hệ thống</h2>
+          </div>
         </header>
 
         <div className="admin-page space-y-8">
@@ -116,8 +118,7 @@ function Dashboard() {
             </div>
           )}
 
-          {/* Metric Cards - Đã thay số thực */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
             <StatCard 
               title="Doanh thu hôm nay" 
               value={formatVnd(stats.revenueToday)}
@@ -126,7 +127,7 @@ function Dashboard() {
             <StatCard 
               title="Tổng đơn hàng" 
               value={Number(stats.ordersToday || 0)}
-              trend="Hôm nay" icon="receipt_long" color="info" 
+              trend="Hôm nay" icon="info" color="info" 
             />
             <StatCard 
               title="Sản phẩm sắp hết" 
@@ -138,82 +139,80 @@ function Dashboard() {
               value={stats.ordersToday ? formatVnd(Math.round((Number(stats.revenueToday || 0)) / Number(stats.ordersToday || 1))) : '0đ'} 
               trend="Hôm nay" icon="insights" color="accent" 
             />
-          </div>
+          </section>
 
-          {/* Dự báo giờ đông + gợi ý AI */}
-          <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 bg-white/90 p-6 rounded-3xl shadow-[0_12px_30px_rgba(74,46,20,0.08)] border border-[#f0dcc6]">
-              <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <section className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.7fr)_300px] gap-4">
+            <div className="rounded-2xl border border-amber-100 bg-gradient-to-br from-[#fffaf2] via-white to-[#fff5e7] p-4 shadow-sm">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                 <div>
-                  <p className="text-xs font-bold text-[#b87414] uppercase tracking-widest">AI dự báo</p>
-                  <h2 className="text-2xl font-extrabold text-[#3a291c]">Dự báo khung giờ đông khách</h2>
-                  <p className="text-xs text-[#8f725b] mt-1">
-                    So sánh trung bình thực tế (đơn đã thanh toán) với mô hình dự báo — khung {hourlyAi?.chart_window?.start ?? 7}h–
-                    {hourlyAi?.chart_window?.end ?? 18}h ({hourlyAi?.period_days ?? 30} ngày gần nhất).
-                  </p>
+                  <h2 className="text-xl font-semibold text-slate-900">Dự báo khung giờ đông khách</h2>
                 </div>
-                <div className="flex items-center gap-4 text-xs text-[#7a5a3a]">
-                  <span className="inline-flex items-center gap-1.5">
-                    <span className="size-2.5 rounded-sm bg-orange-200" />
-                    Trung bình
-                  </span>
-                  <span className="inline-flex items-center gap-1.5">
-                    <span className="size-2.5 rounded-sm bg-[#b87414]" />
-                    Dự báo
-                  </span>
+                <div className="rounded-xl border border-amber-200 bg-white/80 px-3.5 py-2.5 text-[13px] shadow-sm">
+                  <p className="text-slate-500">Chế độ hiển thị</p>
+                  <div className="mt-1 flex items-center gap-3 text-[11px] text-slate-600">
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="size-2 rounded-sm bg-orange-200" /> Trung bình
+                    </span>
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="size-2 rounded-sm bg-[#b87414]" /> Dự báo
+                    </span>
+                  </div>
                 </div>
               </div>
 
               {hourlyErr && (
-                <p className="text-sm text-red-600 mb-3">{hourlyErr}</p>
+                <p className="mt-3 text-sm text-red-600">{hourlyErr}</p>
               )}
 
-              {chartSeries.length > 0 ? (
-                <div className="flex items-end gap-1.5 h-44 px-1">
-                  {chartSeries.map((pt) => {
-                    const avgH = Math.round(((Number(pt.avg_orders) || 0) / chartMax) * 100);
-                    const fcH = Math.round(((Number(pt.forecast_orders) || 0) / chartMax) * 100);
-                    return (
-                      <div key={pt.hour} className="flex-1 flex flex-col items-center gap-1 min-w-0">
-                        <div className="w-full flex items-end justify-center gap-0.5 h-[140px]">
-                          <div
-                            className="w-[42%] rounded-t bg-orange-200 min-h-[2px] transition-all"
-                            style={{ height: `${Math.max(2, avgH)}%` }}
-                            title={`TB ${pt.hour}h: ${pt.avg_orders} đơn`}
-                          />
-                          <div
-                            className="w-[42%] rounded-t bg-[#b87414] min-h-[2px] transition-all"
-                            style={{ height: `${Math.max(2, fcH)}%` }}
-                            title={`Dự báo ${pt.hour}h: ${pt.forecast_orders}`}
-                          />
+              <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4">
+                {chartSeries.length > 0 ? (
+                  <div className="flex items-end gap-1.5 h-44 px-1">
+                    {chartSeries.map((pt) => {
+                      const avgH = Math.round(((Number(pt.avg_orders) || 0) / chartMax) * 100);
+                      const fcH = Math.round(((Number(pt.forecast_orders) || 0) / chartMax) * 100);
+                      return (
+                        <div key={pt.hour} className="flex-1 flex flex-col items-center gap-1 min-w-0">
+                          <div className="w-full flex items-end justify-center gap-0.5 h-[140px]">
+                            <div
+                              className="w-[42%] rounded-t bg-orange-200 min-h-[2px] transition-all"
+                              style={{ height: `${Math.max(2, avgH)}%` }}
+                              title={`TB ${pt.hour}h: ${pt.avg_orders} đơn`}
+                            />
+                            <div
+                              className="w-[42%] rounded-t bg-[#b87414] min-h-[2px] transition-all"
+                              style={{ height: `${Math.max(2, fcH)}%` }}
+                              title={`Dự báo ${pt.hour}h: ${pt.forecast_orders}`}
+                            />
+                          </div>
+                          <span className="text-[10px] font-semibold text-slate-500 tabular-nums">{pt.hour}h</span>
                         </div>
-                        <span className="text-[10px] font-bold text-slate-500 tabular-nums">{pt.hour}h</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                !hourlyErr && (
-                  <p className="text-sm text-slate-500">Chưa có đủ đơn để vẽ biểu đồ theo giờ.</p>
-                )
-              )}
+                      );
+                    })}
+                  </div>
+                ) : (
+                  !hourlyErr && (
+                    <p className="text-sm text-slate-500">Chưa có đủ đơn để vẽ biểu đồ theo giờ.</p>
+                  )
+                )}
+              </div>
             </div>
 
-            <div className="bg-gradient-to-b from-[#fff5e9] via-white to-white p-6 rounded-3xl shadow-[0_12px_30px_rgba(74,46,20,0.08)] border border-[#f0dcc6] flex flex-col">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="material-symbols-outlined text-[#b87414]">smart_toy</span>
-                <h3 className="text-base font-bold text-slate-900">Gợi ý từ AI</h3>
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm flex flex-col">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-base font-semibold text-slate-900">Thông tin nhanh</h3>
+                </div>
+                <div className="rounded-full bg-amber-100 p-1.5 text-amber-700">
+                  <span className="material-symbols-outlined text-[18px]">smart_toy</span>
+                </div>
               </div>
-              <p className="text-xs text-slate-500 mb-3">
-                Điều phối nhân sự, chuẩn bị bar và dự trù trước giờ cao điểm.
-              </p>
-              <div className="flex-1 text-sm text-slate-700 whitespace-pre-wrap leading-relaxed bg-white/80 border border-orange-100 rounded-xl p-4 mb-4">
+              <div className="mt-4 flex-1 rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-[13px] leading-relaxed text-slate-700 whitespace-pre-wrap">
                 {hourlyAi?.ai_analysis ||
                   'Khi có dữ liệu đơn hàng, AI sẽ tóm tắt khung giờ đông và việc cần làm. Thêm OPENAI_API_KEY để phân tích chi tiết hơn.'}
               </div>
               <button
                 type="button"
-                className="w-full py-3 rounded-xl bg-[#b87414] text-white text-sm font-bold shadow-sm hover:opacity-95"
+                className="mt-4 w-full rounded-xl bg-[#b87414] py-3 text-sm font-semibold text-white shadow-sm hover:opacity-95"
                 onClick={() =>
                   toast('Gợi ý: mở lịch ca và ghim thêm 1 nhân viên trước/sau giờ peak 30 phút.', { icon: '👥' })
                 }
@@ -223,11 +222,13 @@ function Dashboard() {
             </div>
           </section>
 
-          {/* Recent Orders Section - Đã thay dữ liệu từ bảng order của bạn */}
-          <section className="bg-white/95 p-6 rounded-3xl shadow-[0_12px_30px_rgba(74,46,20,0.08)] border border-[#f0dcc6]">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-extrabold text-[#3a291c]">Đơn hàng gần đây</h2>
-              <button className="text-[#b87414] font-medium text-sm hover:underline">Xem tất cả</button>
+          <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Đơn hàng</p>
+                <h2 className="mt-1.5 text-base font-semibold text-slate-900">Đơn hàng gần đây</h2>
+              </div>
+              <button className="text-sm font-medium text-amber-700 hover:underline">Xem tất cả</button>
             </div>
             
             <div className="overflow-x-auto">
@@ -301,15 +302,15 @@ const StatCard = ({ title, value, trend, icon, color }) => {
   const current = themes[color] || themes.primary;
 
   return (
-    <div className="bg-white/95 p-5 rounded-2xl border border-[#f0dcc6] shadow-[0_8px_24px_rgba(74,46,20,0.07)] hover:-translate-y-0.5 transition-all duration-200">
-      <div className="flex items-center justify-between mb-4">
-        <div className={`p-2.5 rounded-xl ${current.icon}`}>
-          <span className="material-symbols-outlined text-[22px]">{icon}</span>
+    <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm">
+      <div className="mb-3 flex items-center justify-between">
+        <div className={`rounded-xl p-2 ${current.icon}`}>
+          <span className="material-symbols-outlined text-[18px]">{icon}</span>
         </div>
-        <span className={`text-xs font-bold ${current.trend}`}>{trend}</span>
+        <span className={`text-[11px] font-semibold ${current.trend}`}>{trend}</span>
       </div>
-      <h3 className="text-[#8f725b] text-sm font-semibold">{title}</h3>
-      <p className="text-[30px] leading-tight font-black mt-1 text-[#2f2117] tabular-nums">{value}</p>
+      <h3 className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{title}</h3>
+      <p className="mt-1.5 text-2xl font-semibold text-slate-900 tabular-nums">{value}</p>
     </div>
   );
 };
