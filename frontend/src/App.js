@@ -17,7 +17,6 @@ import Story from './js/story';
 import Stores from './js/stores';
 import News from './js/news';
 import Account from './js/account';
-import CustomerLogin from './js/customerLogin';
 import CustomerRegister from './js/customerRegister';
 import CustomerForgotPassword from './js/customerForgotPassword';
 

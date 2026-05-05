@@ -128,11 +128,6 @@ export default function Stats() {
     return trendData[hoverOrderIdx];
   }, [hoverOrderIdx, trendData]);
 
-  const orderLinePoints = useMemo(
-    () => lineCoords.map((p) => `${p.x},${p.y}`).join(' '),
-    [lineCoords]
-  );
-
   const smoothOrderLinePath = useMemo(() => {
     if (lineCoords.length === 0) return '';
     if (lineCoords.length === 1) {
