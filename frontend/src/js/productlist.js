@@ -4,6 +4,7 @@ import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import Sidebar from '../components/Sidebar';
+import { resolveMediaUrl } from '../utils/media';
 
 const BG = '#f9f7f2';
 const ACCENT = '#c07821';
@@ -1275,7 +1276,7 @@ export default function ProductList() {
                                 <div className="flex items-center gap-3">
                                   <div className="size-12 rounded-xl bg-amber-50 border border-amber-100 overflow-hidden shrink-0 flex items-center justify-center">
                                     {p.image_url ? (
-                                      <img src={p.image_url} alt="" className="w-full h-full object-cover" />
+                                      <img src={resolveMediaUrl(p.image_url)} alt="" className="w-full h-full object-cover" />
                                     ) : (
                                       <span className="material-symbols-outlined text-amber-700">local_cafe</span>
                                     )}
@@ -1358,7 +1359,7 @@ export default function ProductList() {
                         >
                           <div className="h-32 bg-slate-200 flex items-center justify-center relative overflow-hidden">
                             {p.image_url ? (
-                              <img src={p.image_url} alt={p.product_name} className="w-full h-full object-cover" />
+                              <img src={resolveMediaUrl(p.image_url)} alt={p.product_name} className="w-full h-full object-cover" />
                             ) : (
                               <span className="material-symbols-outlined text-4xl text-slate-400">local_cafe</span>
                             )}

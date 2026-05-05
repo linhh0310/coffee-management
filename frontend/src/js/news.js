@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { resolveMediaUrl } from '../utils/media';
 
 const newsItems = [
   {
@@ -110,7 +111,7 @@ export default function News() {
           <Link to="/" className="block w-[220px]">
             <div className="relative h-12 overflow-visible">
               <img
-                src="/uploads/logo/logo.png"
+                src={resolveMediaUrl('/uploads/logo/logo.png')}
                 alt="The Coffee"
                 className="absolute left-0 top-1/2 h-20 w-auto -translate-y-1/2 object-contain"
               />

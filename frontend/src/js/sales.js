@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import Sidebar from '../components/Sidebar';
 import qrPaymentImage from '../assets/qr-payment.jpg';
+import { resolveMediaUrl } from '../utils/media';
 
 function formatVnd(value) {
   const n = Number(value || 0);
@@ -981,7 +982,7 @@ function Sales() {
                     >
                       <div className="aspect-square rounded-2xl bg-orange-50 border border-orange-100 overflow-hidden flex items-center justify-center">
                         {p.image_url ? (
-                          <img src={p.image_url} alt={p.product_name} className="w-full h-full object-cover" />
+                          <img src={resolveMediaUrl(p.image_url)} alt={p.product_name} className="w-full h-full object-cover" />
                         ) : (
                           <span className="material-symbols-outlined text-[#b87414] text-4xl">coffee</span>
                         )}
@@ -1036,7 +1037,7 @@ function Sales() {
                     <div key={it.key} className="flex items-center gap-3">
                       <div className="size-12 rounded-xl bg-orange-50 border border-orange-100 flex items-center justify-center overflow-hidden">
                         {it.product.image_url ? (
-                          <img src={it.product.image_url} alt={it.product.product_name} className="w-full h-full object-cover" />
+                          <img src={resolveMediaUrl(it.product.image_url)} alt={it.product.product_name} className="w-full h-full object-cover" />
                         ) : (
                           <span className="material-symbols-outlined text-[#b87414]">local_cafe</span>
                         )}
@@ -1505,7 +1506,7 @@ function Sales() {
             {/* Header image */}
             <div className="relative h-44 bg-gradient-to-r from-black to-slate-900">
               {selectedProduct.image_url ? (
-                <img src={selectedProduct.image_url} alt={selectedProduct.product_name} className="w-full h-full object-cover opacity-90" />
+                <img src={resolveMediaUrl(selectedProduct.image_url)} alt={selectedProduct.product_name} className="w-full h-full object-cover opacity-90" />
               ) : (
                 <div className="w-full h-full flex items-center justify-center">
                   <span className="material-symbols-outlined text-white text-6xl">coffee</span>
