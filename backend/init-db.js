@@ -3,6 +3,8 @@ const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
 
+const dbPort = Number(process.env.DB_PORT || process.env.MYSQLPORT || 3306);
+
 async function initDb() {
   const schemaPath = path.join(__dirname, '..', 'database', 'coffee_db.sql');
   const migrationsDir = path.join(__dirname, 'migrations');
@@ -10,9 +12,10 @@ async function initDb() {
   const schemaSql = fs.readFileSync(schemaPath, 'utf8');
 
   const conn = await mysql.createConnection({
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
+    host: process.env.DB_HOST || process.env.MYSQLHOST,
+    port: dbPort,
+    user: process.env.DB_USER || process.env.MYSQLUSER,
+    password: process.env.DB_PASSWORD || process.env.MYSQLPASSWORD,
     multipleStatements: true
   });
 
@@ -22,10 +25,11 @@ async function initDb() {
     console.log('Đã import schema chính từ database/coffee_db.sql');
 
     const dbConn = await mysql.createConnection({
-      host: process.env.DB_HOST,
-      user: process.env.DB_USER,
-      password: process.env.DB_PASSWORD,
-      database: process.env.DB_NAME,
+      host: process.env.DB_HOST || process.env.MYSQLHOST,
+      port: dbPort,
+      user: process.env.DB_USER || process.env.MYSQLUSER,
+      password: process.env.DB_PASSWORD || process.env.MYSQLPASSWORD,
+      database: process.env.DB_NAME || process.env.MYSQLDATABASE || process.env.MYSQL_DATABASE,
       multipleStatements: true
     });
 
