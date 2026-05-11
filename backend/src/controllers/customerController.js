@@ -118,6 +118,7 @@ exports.registerCustomer = async (req, res) => {
       }
     });
   } catch (error) {
+    console.error("REGISTER ERROR:", error);
     return res.status(500).json({ message: 'Lỗi đăng ký khách hàng', error: error.message });
   }
 };
