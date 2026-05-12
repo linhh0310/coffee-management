@@ -128,6 +128,31 @@ Frontend mặc định chạy tại: `http://localhost:3000`
 
 > Frontend đang cấu hình `proxy` về `http://localhost:5000` trong `frontend/package.json`.
 
+### Lưu ý khi deploy Railway
+
+Khi deploy tách riêng frontend và backend trên Railway, `proxy` trong `frontend/package.json` không còn tác dụng. Nếu frontend gọi API dạng `/api/...` mà không cấu hình thêm, request sẽ đi về domain frontend và dễ gặp lỗi `404`.
+
+Cần thêm biến môi trường cho service frontend:
+
+```env
+REACT_APP_API_URL=https://your-backend-service.up.railway.app
+```
+
+Thay `https://your-backend-service.up.railway.app` bằng domain backend thật trên Railway, sau đó redeploy frontend. Không thêm dấu `/` ở cuối URL.
+
+Backend cũng cần có biến môi trường:
+
+```env
+JWT_SECRET=change_this_to_a_long_random_secret
+```
+
+Nếu thiếu `JWT_SECRET`, các API đăng nhập/đăng ký có thể lỗi `500` vì không ký được token.
+
+Các endpoint auth đang dùng:
+
+- Nhân viên: `POST /api/auth/login`, `POST /api/auth/register`
+- Khách hàng: `POST /api/customers/auth/login`, `POST /api/customers/auth/register`
+
 ---
 
 ## 5) API chính (Backend)

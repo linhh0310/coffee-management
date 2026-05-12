@@ -4,9 +4,11 @@
 .login-container {
     position: relative;
     min-height: 100vh;
+    min-height: 100dvh;
     display: flex;
     justify-content: center;
     align-items: center;
+    padding: 20px;
     background: url('https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?q=80&w=2070') no-repeat center center/cover;
     font-family: 'Segoe UI', sans-serif;
     overflow: hidden;
@@ -31,14 +33,16 @@
 /* Khung đăng nhập (glassmorphism + fade-in) */
 .login-box {
     position: relative;
-    background: rgba(255, 255, 255, 0.22);
-    padding: 40px;
+    background: rgba(255, 255, 255, 0.82);
+    padding: 34px;
     border-radius: 28px;
-    width: 380px;
+    width: min(380px, 100%);
+    max-height: calc(100dvh - 32px);
+    overflow-y: auto;
     text-align: center;
-    box-shadow: 0 20px 45px rgba(0, 0, 0, 0.35);
-    border: 1px solid rgba(255, 255, 255, 0.32);
-    backdrop-filter: blur(12px);
+    box-shadow: 0 20px 45px rgba(0, 0, 0, 0.28);
+    border: 1px solid rgba(255, 255, 255, 0.48);
+    backdrop-filter: blur(14px);
     animation: popIn 0.55s ease;
 }
 
@@ -88,12 +92,13 @@
 
 .input-group input {
     width: 100%;
+    min-height: 48px;
     padding: 14px 50px 14px 50px; /* Thêm padding right cho icon mắt */
     border: 1px solid #ddd;
     border-radius: 30px;
-    background-color: rgba(248, 249, 250, 0.85);
+    background-color: rgba(248, 249, 250, 0.92);
     box-sizing: border-box;
-    font-size: 15px;
+    font-size: 16px;
     outline: none;
     transition: border 0.25s ease, box-shadow 0.25s ease;
 }
@@ -106,6 +111,7 @@
 /* Nút Login/Sign Up màu nâu */
 .login-btn {
     width: 100%;
+    min-height: 48px;
     padding: 14px;
     background-color: #8b6220;
     color: white;
@@ -150,4 +156,50 @@
     margin-top: 6px;
     margin-bottom: 0;
     text-align: left;
+}
+
+@media (max-width: 480px) {
+    .login-container {
+        align-items: flex-start;
+        padding: 16px;
+        overflow-y: auto;
+    }
+
+    .login-box {
+        margin-top: 18px;
+        padding: 24px 18px;
+        border-radius: 24px;
+    }
+
+    .coffee-logo {
+        font-size: 42px;
+    }
+
+    .login-box h2 {
+        font-size: 23px;
+    }
+
+    .subtitle {
+        margin-bottom: 22px;
+    }
+}
+
+@media (hover: none) {
+    .login-btn:hover,
+    .secondary-btn:hover {
+        transform: none;
+        box-shadow: none;
+    }
+
+    .login-btn:active,
+    .secondary-btn:active {
+        transform: scale(0.98);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .login-container::before,
+    .login-box {
+        animation: none !important;
+    }
 }

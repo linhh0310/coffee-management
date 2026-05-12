@@ -19,6 +19,7 @@ import News from './js/news';
 import Account from './js/account';
 import CustomerRegister from './js/customerRegister';
 import CustomerForgotPassword from './js/customerForgotPassword';
+import CustomerFooter from './components/CustomerFooter';
 
 // Component bảo vệ tuyến đường + phân quyền role
 const PrivateRoute = ({ children, roles = [] }) => {
@@ -52,22 +53,31 @@ const AnimatedPage = ({ children }) => (
   </motion.div>
 );
 
+const CustomerPage = ({ children }) => (
+  <AnimatedPage>
+    <div className="customer-page-shell">
+      {children}
+      <CustomerFooter />
+    </div>
+  </AnimatedPage>
+);
+
 function AppRoutes() {
   const location = useLocation();
   return (
     <AnimatePresence mode="wait">
       <Routes location={location} key={location.pathname}>
         {/* Trang chủ khách hàng */}
-        <Route path="/" element={<AnimatedPage><Home /></AnimatedPage>} />
-        <Route path="/story" element={<AnimatedPage><Story /></AnimatedPage>} />
-        <Route path="/stores" element={<AnimatedPage><Stores /></AnimatedPage>} />
-        <Route path="/news" element={<AnimatedPage><News /></AnimatedPage>} />
-        <Route path="/account" element={<AnimatedPage><Account /></AnimatedPage>} />
+        <Route path="/" element={<CustomerPage><Home /></CustomerPage>} />
+        <Route path="/story" element={<CustomerPage><Story /></CustomerPage>} />
+        <Route path="/stores" element={<CustomerPage><Stores /></CustomerPage>} />
+        <Route path="/news" element={<CustomerPage><News /></CustomerPage>} />
+        <Route path="/account" element={<CustomerPage><Account /></CustomerPage>} />
         <Route path="/customer/login" element={<Navigate to="/login" />} />
-        <Route path="/customer/register" element={<AnimatedPage><CustomerRegister /></AnimatedPage>} />
-        <Route path="/customer/forgot-password" element={<AnimatedPage><CustomerForgotPassword /></AnimatedPage>} />
+        <Route path="/customer/register" element={<CustomerPage><CustomerRegister /></CustomerPage>} />
+        <Route path="/customer/forgot-password" element={<CustomerPage><CustomerForgotPassword /></CustomerPage>} />
         {/* 1. Trang Đăng nhập */}
-        <Route path="/login" element={<AnimatedPage><Login /></AnimatedPage>} />
+        <Route path="/login" element={<CustomerPage><Login /></CustomerPage>} />
         {/* Khóa route đăng ký cũ để tránh tạo nhầm tài khoản nhân viên */}
         <Route path="/register" element={<Navigate to="/customer/register" />} />
         <Route path="/staff/register" element={<AnimatedPage><PrivateRoute><Register /></PrivateRoute></AnimatedPage>} />

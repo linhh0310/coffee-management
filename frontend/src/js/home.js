@@ -152,30 +152,30 @@ export default function Home() {
 
   return (
     <div className="customer-home min-h-screen bg-[#f7f2eb] text-[#2d1f16]">
-      <header className="border-b border-[#e8dccf] bg-[#fffaf4]/95 backdrop-blur fx-fade-up">
-        <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-4 md:px-6">
-          <Link to="/" className="block w-[220px]">
-            <div className="relative h-12 overflow-visible">
+      <header className="sticky top-0 z-40 border-b border-[#e8dccf] bg-[#fffaf4]/95 backdrop-blur fx-fade-up">
+        <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3 md:flex-nowrap md:px-6 md:py-4">
+          <Link to="/" className="block w-[150px] shrink-0 sm:w-[190px] md:w-[220px]">
+            <div className="relative h-10 overflow-visible md:h-12">
               <img
                 src={resolveMediaUrl('/uploads/logo/logo.png')}
                 alt="The Coffee"
-                className="absolute left-0 top-1/2 h-20 w-auto -translate-y-1/2 object-contain"
+                className="absolute left-0 top-1/2 h-16 w-auto -translate-y-1/2 object-contain md:h-20"
               />
             </div>
           </Link>
-          <nav className="hidden items-center gap-5 text-sm font-semibold text-[#6b4d37] md:flex">
-            <Link to="/story" className="hover:text-[#7a4a27]">Câu chuyện</Link>
-            <Link to="/stores" className="hover:text-[#7a4a27]">Cửa hàng</Link>
-            <Link to="/news" className="hover:text-[#7a4a27]">Tin tức</Link>
-            <Link to="/account" className="hover:text-[#7a4a27]">Tài khoản</Link>
+          <nav className="order-3 flex w-full items-center gap-2 overflow-x-auto pb-1 text-xs font-semibold text-[#6b4d37] md:order-none md:w-auto md:gap-5 md:overflow-visible md:pb-0 md:text-sm">
+            <Link to="/story" className="shrink-0 rounded-full bg-white/70 px-3 py-2 hover:text-[#7a4a27] md:bg-transparent md:p-0">Câu chuyện</Link>
+            <Link to="/stores" className="shrink-0 rounded-full bg-white/70 px-3 py-2 hover:text-[#7a4a27] md:bg-transparent md:p-0">Cửa hàng</Link>
+            <Link to="/news" className="shrink-0 rounded-full bg-white/70 px-3 py-2 hover:text-[#7a4a27] md:bg-transparent md:p-0">Tin tức</Link>
+            <Link to="/account" className="shrink-0 rounded-full bg-white/70 px-3 py-2 hover:text-[#7a4a27] md:bg-transparent md:p-0">Tài khoản</Link>
           </nav>
-          <div className="flex items-center gap-3 relative">
+          <div className="relative flex shrink-0 items-center gap-2 md:gap-3">
             {!customerToken ? (
               <>
-                <Link className="rounded-full border border-[#d5b899] px-4 py-2 text-sm font-semibold hover:bg-[#f7eadb]" to="/customer/login">
+                <Link className="rounded-full border border-[#d5b899] px-3 py-2 text-xs font-semibold hover:bg-[#f7eadb] sm:px-4 sm:text-sm" to="/customer/login">
                   Đăng nhập
                 </Link>
-                <Link className="rounded-full bg-[#7a4a27] px-4 py-2 text-sm font-semibold text-white hover:bg-[#5e3519]" to="/customer/register">
+                <Link className="rounded-full bg-[#7a4a27] px-3 py-2 text-xs font-semibold text-white hover:bg-[#5e3519] sm:px-4 sm:text-sm" to="/customer/register">
                   Đăng ký
                 </Link>
               </>
@@ -223,18 +223,18 @@ export default function Home() {
       </header>
 
       <main>
-        <section className="mx-auto w-full max-w-6xl px-4 pb-10 pt-10 md:px-6 md:pt-12 fx-fade-up fx-fade-up-delay-1">
-          <div className="hero-image fx-parallax rounded-3xl p-6 text-white shadow-2xl md:p-10" style={{ '--scrollY': scrollY }}>
-            <p className="text-xs uppercase tracking-[0.25em] text-white/80">{active.subtitle}</p>
-            <h2 className="mt-3 max-w-2xl text-3xl font-black leading-tight md:text-5xl">{active.title}</h2>
-            <p className="mt-4 max-w-xl text-sm leading-7 text-white/90 md:text-base">{active.desc}</p>
+        <section className="mx-auto w-full max-w-6xl px-4 pb-8 pt-6 md:px-6 md:pb-10 md:pt-12 fx-fade-up fx-fade-up-delay-1">
+          <div className="hero-image fx-parallax rounded-[28px] p-5 text-white shadow-2xl md:rounded-3xl md:p-10" style={{ '--scrollY': scrollY }}>
+            <p className="text-[10px] uppercase tracking-[0.2em] text-white/80 md:text-xs md:tracking-[0.25em]">{active.subtitle}</p>
+            <h2 className="mt-3 max-w-2xl text-[30px] font-black leading-[1.08] md:text-5xl">{active.title}</h2>
+            <p className="mt-4 max-w-xl text-sm leading-6 text-white/90 md:text-base md:leading-7">{active.desc}</p>
             <div className="mt-6 flex items-center gap-3">
               {String(active.section).startsWith('/') ? (
-                <Link className="rounded-full bg-white px-6 py-3 text-sm font-bold text-[#5e3519]" to={active.section}>
+                <Link className="rounded-full bg-white px-5 py-3 text-sm font-bold text-[#5e3519] shadow-lg shadow-black/10 active:scale-95 md:px-6" to={active.section}>
                   {active.cta}
                 </Link>
               ) : (
-                <a className="rounded-full bg-white px-6 py-3 text-sm font-bold text-[#5e3519]" href={active.section}>
+                <a className="rounded-full bg-white px-5 py-3 text-sm font-bold text-[#5e3519] shadow-lg shadow-black/10 active:scale-95 md:px-6" href={active.section}>
                   {active.cta}
                 </a>
               )}
@@ -252,9 +252,9 @@ export default function Home() {
           </div>
         </section>
 
-        <section id="products" className="bg-[#efeadf] py-14 fx-fade-up fx-fade-up-delay-2">
+        <section id="products" className="bg-[#efeadf] py-10 md:py-14 fx-fade-up fx-fade-up-delay-2">
           <div className="mx-auto w-full max-w-6xl px-4 md:px-6">
-            <h3 className="text-center text-4xl font-black">Danh mục toàn bộ sản phẩm</h3>
+            <h3 className="text-center text-2xl font-black leading-tight md:text-4xl">Danh mục toàn bộ sản phẩm</h3>
 
             {productsLoading ? (
               <div className="mt-8 grid grid-cols-1 gap-5 md:grid-cols-2">
@@ -268,23 +268,23 @@ export default function Home() {
               </div>
             ) : (
               <>
-                <div className="mt-8 flex flex-wrap items-center gap-2">
+                <div className="mt-6 flex snap-x items-center gap-2 overflow-x-auto pb-2 md:mt-8 md:flex-wrap md:overflow-visible md:pb-0">
                   {categoryList.map((cat) => (
                     <button
                       key={cat}
                       type="button"
                       onClick={() => setActiveCategory(cat)}
-                      className={`rounded-full px-4 py-2 text-xs font-bold border ${activeCategory === cat ? 'bg-[#ef7f3b] text-white border-[#ef7f3b]' : 'bg-white text-[#555] border-[#ddd]'}`}
+                      className={`snap-start whitespace-nowrap rounded-full border px-4 py-2.5 text-xs font-bold active:scale-95 ${activeCategory === cat ? 'bg-[#ef7f3b] text-white border-[#ef7f3b]' : 'bg-white text-[#555] border-[#ddd]'}`}
                     >
                       {cat}
                     </button>
                   ))}
                 </div>
 
-                <div className="mt-8 grid grid-cols-2 gap-x-6 gap-y-8 md:grid-cols-4">
+                <div className="mt-6 grid grid-cols-2 gap-3 sm:gap-5 md:mt-8 md:grid-cols-4 md:gap-x-6 md:gap-y-8">
                   {categoryProducts.map((item, idx) => (
-                    <article key={item.product_id} className="group text-center rounded-xl p-2 transition hover:bg-[#fff9f3] fx-card fx-glow fx-stagger" style={{ '--i': idx }}>
-                      <div className="mx-auto h-28 w-28 rounded-full bg-[#f1e7db] overflow-hidden flex items-center justify-center shadow-sm ring-1 ring-[#ead9c7] transition group-hover:scale-[1.04] group-hover:shadow-md">
+                    <article key={item.product_id} className="group rounded-2xl bg-white/55 p-3 text-center shadow-sm ring-1 ring-[#ead9c7]/60 transition active:scale-[0.98] hover:bg-[#fff9f3] md:bg-transparent md:p-2 md:shadow-none md:ring-0 fx-card fx-glow fx-stagger" style={{ '--i': idx }}>
+                      <div className="mx-auto flex h-24 w-24 items-center justify-center overflow-hidden rounded-full bg-[#f1e7db] shadow-sm ring-1 ring-[#ead9c7] transition group-hover:scale-[1.04] group-hover:shadow-md md:h-28 md:w-28">
                         {item.image_url ? (
                           <img src={item.image_url} alt={item.product_name} className="h-full w-full object-cover transition group-hover:scale-110" />
                         ) : (
@@ -302,8 +302,8 @@ export default function Home() {
           </div>
         </section>
 
-        <section id="membership" className="mx-auto grid w-full max-w-6xl gap-6 px-4 py-14 md:grid-cols-2 md:px-6">
-          <article className="rounded-3xl bg-[#2f1f15] p-7 text-white md:p-9">
+        <section id="membership" className="mx-auto grid w-full max-w-6xl gap-4 px-4 py-10 md:grid-cols-2 md:gap-6 md:px-6 md:py-14">
+          <article className="rounded-[28px] bg-[#2f1f15] p-5 text-white md:rounded-3xl md:p-9">
             <p className="text-xs uppercase tracking-[0.24em] text-[#dfbe9b]">Về cửa hàng</p>
             <h3 className="mt-3 text-2xl font-bold">Không chỉ là một ly cà phê</h3>
             <p className="mt-4 text-sm leading-7 text-[#f3e7dc]">
@@ -312,17 +312,17 @@ export default function Home() {
             </p>
           </article>
 
-          <article className="rounded-3xl border border-[#e8d4bf] bg-[#fff8ef] p-7 md:p-9">
+          <article className="rounded-[28px] border border-[#e8d4bf] bg-[#fff8ef] p-5 md:rounded-3xl md:p-9">
             <p className="text-xs uppercase tracking-[0.24em] text-[#9a7b5f]">Tài khoản khách hàng</p>
-            <h3 className="mt-3 text-2xl font-bold text-[#7a4a27]">Tra cứu điểm tích lũy thực tế</h3>
-            <form onSubmit={handleLookup} className="mt-4 flex gap-3">
+            <h3 className="mt-3 text-xl font-bold text-[#7a4a27] md:text-2xl">Tra cứu điểm tích lũy thực tế</h3>
+            <form onSubmit={handleLookup} className="mt-4 flex flex-col gap-3 sm:flex-row">
               <input
-                className="flex-1 rounded-xl border border-[#e3cfb8] px-3 py-2 text-sm"
+                className="min-h-11 flex-1 rounded-xl border border-[#e3cfb8] px-3 py-2 text-base outline-none focus:border-[#b87414] focus:ring-4 focus:ring-[#b87414]/10 sm:text-sm"
                 placeholder="Nhập số điện thoại"
                 value={customerLookup.phone}
                 onChange={(e) => setCustomerLookup((s) => ({ ...s, phone: e.target.value }))}
               />
-              <button type="submit" className="rounded-xl bg-[#7a4a27] px-4 py-2 text-sm font-semibold text-white">
+              <button type="submit" className="min-h-11 rounded-xl bg-[#7a4a27] px-4 py-2 text-sm font-semibold text-white active:scale-[0.98]">
                 {customerLookup.loading ? 'Đang tra cứu...' : 'Xem điểm'}
               </button>
             </form>
