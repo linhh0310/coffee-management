@@ -622,6 +622,7 @@ const getInvoiceDetail = async (req, res) => {
 
 const checkoutOrder = async (req, res) => {
   const userId = req.user?.id;
+  const userRole = String(req.user?.role || '').toLowerCase();
   const {
     table_id = null,
     order_type = 'dine_in',
@@ -665,9 +666,24 @@ const checkoutOrder = async (req, res) => {
     return res.status(400).json({ message: 'payment_method không hợp lệ' });
   }
 
-  const useLoyalty = Boolean(loyalty?.use_points);
-  const loyaltyPhone = String(loyalty?.phone || '').trim();
-  const loyaltyName = String(loyalty?.full_name || '').trim() || 'Khách POS';
+  const isCustomerCheckout = userRole === 'customer';
+  const useLoyalty = isCustomerCheckout || Boolean(loyalty?.use_points);
+  let loyaltyPhone = String(loyalty?.phone || '').trim();
+  let loyaltyName = String(loyalty?.full_name || '').trim() || 'Khách POS';
+
+  if (isCustomerCheckout) {
+    try {
+      const [[customerRow]] = await db.query(
+        'SELECT full_name, phone FROM customers WHERE customer_id = ? LIMIT 1',
+        [Number(userId)]
+      );
+      loyaltyPhone = String(customerRow?.phone || '').trim();
+      loyaltyName = String(customerRow?.full_name || '').trim() || 'Khách hàng';
+    } catch (_err) {
+      return res.status(500).json({ message: 'Không thể xác thực thông tin khách hàng' });
+    }
+  }
+
   if (useLoyalty && !loyaltyPhone) {
     return res.status(400).json({ message: 'Thiếu số điện thoại tích điểm' });
   }
@@ -714,20 +730,23 @@ const checkoutOrder = async (req, res) => {
 
     const hasCustomerColumn = await ensureOrderCustomerColumn(conn);
 
+    const orderUserId = isCustomerCheckout ? null : userId;
+    const orderCustomerId = isCustomerCheckout ? Number(userId) : null;
+
     const [orderResult] = hasCustomerColumn
       ? await conn.query(
         `
           INSERT INTO orders (user_id, table_id, customer_id, total_amount, final_amount, payment_method, order_type, status)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         `,
-        [userId, table_id || null, null, totalAmount, finalAmount, normalizedPayment, normalizedOrderType, normalizedStatus]
+        [orderUserId, table_id || null, orderCustomerId, totalAmount, finalAmount, normalizedPayment, normalizedOrderType, normalizedStatus]
       )
       : await conn.query(
         `
           INSERT INTO orders (user_id, table_id, total_amount, final_amount, payment_method, order_type, status)
           VALUES (?, ?, ?, ?, ?, ?, ?)
         `,
-        [userId, table_id || null, totalAmount, finalAmount, normalizedPayment, normalizedOrderType, normalizedStatus]
+        [orderUserId, table_id || null, totalAmount, finalAmount, normalizedPayment, normalizedOrderType, normalizedStatus]
       );
 
     const orderId = orderResult.insertId;
@@ -834,10 +853,15 @@ const checkoutOrder = async (req, res) => {
 
     let loyaltyResult = null;
     if (useLoyalty) {
-      const [customerRows] = await conn.query(
-        `SELECT customer_id, points, total_spent FROM customers WHERE phone = ? LIMIT 1`,
-        [loyaltyPhone]
-      );
+      const [customerRows] = isCustomerCheckout
+        ? await conn.query(
+          `SELECT customer_id, points, total_spent FROM customers WHERE customer_id = ? LIMIT 1`,
+          [Number(userId)]
+        )
+        : await conn.query(
+          `SELECT customer_id, points, total_spent FROM customers WHERE phone = ? LIMIT 1`,
+          [loyaltyPhone]
+        );
 
       const toTier = (points) => {
         if (points >= 5000) return 'platinum';
