@@ -571,6 +571,8 @@ exports.lookupCustomerPoints = async (req, res) => {
   }
 
   try {
+    await ensureRewardVoucherTable();
+
     const [rows] = await db.query(
       `
         SELECT customer_id, full_name, phone, points, tier, status, total_spent, updated_at
@@ -591,6 +593,32 @@ exports.lookupCustomerPoints = async (req, res) => {
       return res.status(403).json({ message: 'Tài khoản thành viên đang tạm khóa' });
     }
 
+    const [rewardRows] = await db.query(
+      `
+        SELECT voucher_code, voucher_title, discount_percent, points_spent, status, expires_at, created_at
+        FROM customer_reward_vouchers
+        WHERE customer_id = ?
+        ORDER BY created_at DESC
+      `,
+      [Number(customer.customer_id)]
+    );
+
+    const now = new Date();
+    const rewardVouchers = (rewardRows || [])
+      .map((row) => {
+        const expiresAt = new Date(row.expires_at);
+        const status = row.status === 'used' ? 'used' : now > expiresAt ? 'expired' : 'active';
+        return {
+          code: row.voucher_code,
+          title: row.voucher_title,
+          discount_percent: Number(row.discount_percent || REDEEM_VOUCHER_RULE.discountPercent),
+          points_spent: Number(row.points_spent || REDEEM_VOUCHER_RULE.requiredPoints),
+          status,
+          expiry: expiresAt.toLocaleDateString('vi-VN')
+        };
+      })
+      .filter((voucher) => voucher.status === 'active');
+
     return res.json({
       customer: {
         customer_id: customer.customer_id,
@@ -600,6 +628,12 @@ exports.lookupCustomerPoints = async (req, res) => {
         tier: customer.tier || calcTier(customer.points),
         total_spent: Number(customer.total_spent || 0),
         updated_at: customer.updated_at
+      },
+      reward_vouchers: rewardVouchers,
+      redeem_rule: {
+        required_points: REDEEM_VOUCHER_RULE.requiredPoints,
+        discount_percent: REDEEM_VOUCHER_RULE.discountPercent,
+        eligible: Number(customer.points || 0) >= REDEEM_VOUCHER_RULE.requiredPoints
       }
     });
   } catch (error) {

@@ -2,9 +2,24 @@ const db = require('../config/db');
 
 const TAX_RATE = 0.1;
 const LOYALTY_POINT_DIVISOR = 10000; // 1 điểm / 10.000đ thanh toán
+const REWARD_VOUCHER_MIN_ORDER = 50000;
+
+const REDEEM_VOUCHER_RULE = {
+  requiredPoints: 100,
+  discountPercent: 10,
+  title: 'Voucher giảm 10%',
+  description: 'Đổi từ 100 điểm thành viên'
+};
+
+function buildRewardVoucherCode(customerId) {
+  const suffix = Math.random().toString(36).slice(2, 8).toUpperCase();
+  return `TV-${String(customerId).padStart(4, '0')}-${suffix}`;
+}
 
 let orderCustomerColumnEnsured = false;
 let orderHasCustomerColumn = false;
+let orderRewardColumnsEnsured = false;
+let orderHasRewardColumns = false;
 
 async function ensureOrderCustomerColumn(connLike = db) {
   if (orderCustomerColumnEnsured) return orderHasCustomerColumn;
@@ -49,6 +64,54 @@ async function ensureOrderCustomerColumn(connLike = db) {
 
   orderCustomerColumnEnsured = true;
   return orderHasCustomerColumn;
+}
+
+async function ensureOrderRewardColumns(connLike = db) {
+  if (orderRewardColumnsEnsured) return orderHasRewardColumns;
+
+  try {
+    const [existsRows] = await connLike.query(
+      `
+      SELECT COUNT(*) AS cnt
+      FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'orders'
+        AND COLUMN_NAME = 'reward_voucher_id'
+      `
+    );
+
+    if (Number(existsRows?.[0]?.cnt || 0) > 0) {
+      orderHasRewardColumns = true;
+      orderRewardColumnsEnsured = true;
+      return true;
+    }
+
+    try {
+      await connLike.query('ALTER TABLE orders ADD COLUMN reward_voucher_id INT NULL');
+      await connLike.query("ALTER TABLE orders ADD COLUMN reward_voucher_code VARCHAR(64) NULL");
+      await connLike.query('ALTER TABLE orders ADD COLUMN reward_points_spent INT NOT NULL DEFAULT 0');
+      await connLike.query("ALTER TABLE orders ADD COLUMN reward_points_deducted TINYINT(1) NOT NULL DEFAULT 0");
+    } catch (_alterErr) {
+      // ignore
+    }
+
+    const [recheckRows] = await connLike.query(
+      `
+      SELECT COUNT(*) AS cnt
+      FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'orders'
+        AND COLUMN_NAME = 'reward_voucher_id'
+      `
+    );
+
+    orderHasRewardColumns = Number(recheckRows?.[0]?.cnt || 0) > 0;
+  } catch (_err) {
+    orderHasRewardColumns = false;
+  }
+
+  orderRewardColumnsEnsured = true;
+  return orderHasRewardColumns;
 }
 
 // API thống kê hàng ngày
@@ -629,7 +692,8 @@ const checkoutOrder = async (req, res) => {
     payment_method = 'cash',
     status = 'paid',
     items = [],
-    loyalty = {}
+    loyalty = {},
+    reward_voucher = null
   } = req.body || {};
 
   if (!userId) {
@@ -668,6 +732,7 @@ const checkoutOrder = async (req, res) => {
 
   const isCustomerCheckout = userRole === 'customer';
   const useLoyalty = isCustomerCheckout || Boolean(loyalty?.use_points);
+  const useRewardVoucher = Boolean(reward_voucher?.apply);
   let loyaltyPhone = String(loyalty?.phone || '').trim();
   let loyaltyName = String(loyalty?.full_name || '').trim() || 'Khách POS';
 
@@ -684,8 +749,13 @@ const checkoutOrder = async (req, res) => {
     }
   }
 
-  if (useLoyalty && !loyaltyPhone) {
-    return res.status(400).json({ message: 'Thiếu số điện thoại tích điểm' });
+  if ((useLoyalty || useRewardVoucher) && !loyaltyPhone) {
+    return res.status(400).json({ message: 'Thiếu số điện thoại khách hàng' });
+  }
+
+  // Disallow combining reward voucher with other promotions
+  if (useRewardVoucher && (req.body?.promo_code || req.body?.promotion_applied)) {
+    return res.status(400).json({ message: 'Không được kết hợp voucher đổi điểm với chương trình khuyến mãi khác' });
   }
 
   const productIds = [...new Set(items.map((i) => Number(i.product_id)))].filter(Boolean);
@@ -724,8 +794,127 @@ const checkoutOrder = async (req, res) => {
       return sum + linePrice * qty;
     }, 0);
 
-    const taxAmount = Math.round(totalAmount * TAX_RATE);
-    const finalAmount = totalAmount + taxAmount;
+    let rewardVoucherRecord = null;
+    let discountAmount = 0;
+    let rewardPointsSpent = 0;
+    let rewardPointsDeducted = 0;
+
+    if (useRewardVoucher) {
+      if (!useLoyalty) {
+        await conn.rollback();
+        return res.status(400).json({ message: 'Phải chọn khách hàng tích điểm trước khi áp dụng voucher.' });
+      }
+      if (totalAmount < REWARD_VOUCHER_MIN_ORDER) {
+        await conn.rollback();
+        return res.status(400).json({ message: `Voucher chỉ áp dụng cho hóa đơn từ ${REWARD_VOUCHER_MIN_ORDER.toLocaleString('vi-VN')}đ trở lên.` });
+      }
+
+      // If requesting to redeem points directly at checkout (redeem_points = true), create voucher on the fly
+      const redeemPoints = Boolean(reward_voucher?.redeem_points);
+      if (redeemPoints) {
+        // find customer
+        const [custRows] = isCustomerCheckout
+          ? await conn.query('SELECT customer_id, points FROM customers WHERE customer_id = ? LIMIT 1 FOR UPDATE', [Number(userId)])
+          : await conn.query('SELECT customer_id, points FROM customers WHERE phone = ? LIMIT 1 FOR UPDATE', [loyaltyPhone]);
+
+        const cust = custRows[0];
+        if (!cust) {
+          await conn.rollback();
+          return res.status(404).json({ message: 'Không tìm thấy tài khoản khách hàng để đổi điểm' });
+        }
+
+        if (Number(cust.points || 0) < Number(REDEEM_VOUCHER_RULE.requiredPoints || 0)) {
+          await conn.rollback();
+          return res.status(400).json({ message: `Khách hàng không đủ điểm (cần ${REDEEM_VOUCHER_RULE.requiredPoints}).` });
+        }
+
+        // create voucher
+        const voucherCode = buildRewardVoucherCode(cust.customer_id);
+        const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+        const voucherStatus = normalizedStatus === 'paid' ? 'used' : 'active';
+
+        const [ins] = await conn.query(
+          `INSERT INTO customer_reward_vouchers (customer_id, voucher_code, voucher_title, discount_percent, points_spent, status, expires_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [cust.customer_id, voucherCode, REDEEM_VOUCHER_RULE.title, REDEEM_VOUCHER_RULE.discountPercent, REDEEM_VOUCHER_RULE.requiredPoints, voucherStatus, expiresAt]
+        );
+
+        rewardVoucherRecord = {
+          reward_voucher_id: ins.insertId,
+          customer_id: cust.customer_id,
+          voucher_code: voucherCode,
+          voucher_title: REDEEM_VOUCHER_RULE.title,
+          discount_percent: REDEEM_VOUCHER_RULE.discountPercent,
+          points_spent: REDEEM_VOUCHER_RULE.requiredPoints,
+          status: voucherStatus,
+          expires_at: expiresAt
+        };
+
+        rewardPointsSpent = Number(REDEEM_VOUCHER_RULE.requiredPoints || 0);
+        rewardPointsDeducted = normalizedStatus === 'paid' ? 1 : 0;
+
+        if (normalizedStatus === 'paid') {
+          await conn.query('UPDATE customers SET points = points - ? WHERE customer_id = ?', [rewardPointsSpent, cust.customer_id]);
+        }
+      } else {
+        const voucherCode = String(reward_voucher?.code || '').trim();
+        if (!voucherCode) {
+          await conn.rollback();
+          return res.status(400).json({ message: 'Thiếu mã voucher cần áp dụng.' });
+        }
+
+        const [voucherRows] = await conn.query(
+        `
+          SELECT rv.reward_voucher_id, rv.customer_id, rv.voucher_code, rv.voucher_title, rv.discount_percent, rv.points_spent, rv.status, rv.expires_at,
+                 c.phone
+          FROM customer_reward_vouchers rv
+          JOIN customers c ON c.customer_id = rv.customer_id
+          WHERE rv.voucher_code = ?
+          LIMIT 1
+          FOR UPDATE
+        `,
+        [voucherCode]
+      );
+
+        if (!voucherRows.length) {
+          await conn.rollback();
+          return res.status(400).json({ message: 'Voucher không tồn tại.' });
+        }
+
+        const voucher = voucherRows[0];
+        const normalizedPhone = String(loyaltyPhone).replace(/\D/g, '');
+        const voucherPhone = String(voucher.phone || '').replace(/\D/g, '');
+        if (normalizedPhone !== voucherPhone) {
+          await conn.rollback();
+          return res.status(400).json({ message: 'Voucher không thuộc về số điện thoại khách hàng đang chọn.' });
+        }
+        if (String(voucher.status) !== 'active') {
+          await conn.rollback();
+          return res.status(400).json({ message: 'Voucher không còn khả dụng.' });
+        }
+        if (new Date(voucher.expires_at) < new Date()) {
+          await conn.rollback();
+          return res.status(400).json({ message: 'Voucher đã hết hạn.' });
+        }
+
+        rewardVoucherRecord = voucher;
+        discountAmount = Math.round(totalAmount * (Number(voucher.discount_percent || 0) / 100));
+        rewardPointsSpent = Number(voucher.points_spent || 0);
+        // only deduct at checkout if already paid
+        rewardPointsDeducted = normalizedStatus === 'paid' && rewardPointsSpent > 0 ? 1 : 0;
+        if (normalizedStatus === 'paid' && rewardPointsSpent > 0) {
+          await conn.query('UPDATE customers SET points = points - ? WHERE customer_id = ?', [rewardPointsSpent, voucher.customer_id]);
+          await conn.query(`UPDATE customer_reward_vouchers SET status = 'used' WHERE reward_voucher_id = ?`, [voucher.reward_voucher_id]);
+        }
+      }
+    }
+
+    // ensure reward columns exist on orders
+    const hasRewardColumns = await ensureOrderRewardColumns(conn);
+
+    const discountedSubtotal = Math.max(0, totalAmount - discountAmount);
+    const taxAmount = Math.round(discountedSubtotal * TAX_RATE);
+    const finalAmount = discountedSubtotal + taxAmount;
     const earnedPoints = Math.floor(finalAmount / LOYALTY_POINT_DIVISOR);
 
     const hasCustomerColumn = await ensureOrderCustomerColumn(conn);
@@ -733,20 +922,28 @@ const checkoutOrder = async (req, res) => {
     const orderUserId = isCustomerCheckout ? null : userId;
     const orderCustomerId = isCustomerCheckout ? Number(userId) : null;
 
+    // include reward columns in order record
+    const rvId = rewardVoucherRecord ? Number(rewardVoucherRecord.reward_voucher_id || rewardVoucherRecord.reward_voucher_id) : null;
+    const rvCode = rewardVoucherRecord ? String(rewardVoucherRecord.voucher_code || rewardVoucherRecord.voucher_code || rewardVoucherRecord.voucher_code) : null;
+
+    const orderInsertParamsBase = hasCustomerColumn
+      ? [orderUserId, table_id || null, orderCustomerId, discountedSubtotal, finalAmount, normalizedPayment, normalizedOrderType, normalizedStatus, rvId, rvCode, rewardPointsSpent, rewardPointsDeducted]
+      : [orderUserId, table_id || null, discountedSubtotal, finalAmount, normalizedPayment, normalizedOrderType, normalizedStatus, rvId, rvCode, rewardPointsSpent, rewardPointsDeducted];
+
     const [orderResult] = hasCustomerColumn
       ? await conn.query(
         `
-          INSERT INTO orders (user_id, table_id, customer_id, total_amount, final_amount, payment_method, order_type, status)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO orders (user_id, table_id, customer_id, total_amount, final_amount, payment_method, order_type, status, reward_voucher_id, reward_voucher_code, reward_points_spent, reward_points_deducted)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
-        [orderUserId, table_id || null, orderCustomerId, totalAmount, finalAmount, normalizedPayment, normalizedOrderType, normalizedStatus]
+        orderInsertParamsBase
       )
       : await conn.query(
         `
-          INSERT INTO orders (user_id, table_id, total_amount, final_amount, payment_method, order_type, status)
-          VALUES (?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO orders (user_id, table_id, total_amount, final_amount, payment_method, order_type, status, reward_voucher_id, reward_voucher_code, reward_points_spent, reward_points_deducted)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
-        [orderUserId, table_id || null, totalAmount, finalAmount, normalizedPayment, normalizedOrderType, normalizedStatus]
+        orderInsertParamsBase
       );
 
     const orderId = orderResult.insertId;
@@ -851,6 +1048,13 @@ const checkoutOrder = async (req, res) => {
       }
     }
 
+    if (rewardVoucherRecord) {
+      await conn.query(
+        `UPDATE customer_reward_vouchers SET status = 'used' WHERE reward_voucher_id = ?`,
+        [rewardVoucherRecord.reward_voucher_id]
+      );
+    }
+
     let loyaltyResult = null;
     if (useLoyalty) {
       const [customerRows] = isCustomerCheckout
@@ -917,11 +1121,21 @@ const checkoutOrder = async (req, res) => {
 
     return res.status(201).json({
       order_id: orderId,
-      total_amount: totalAmount,
+      total_amount: discountedSubtotal,
+      original_total_amount: totalAmount,
+      discount_amount: discountAmount,
       tax_amount: taxAmount,
       final_amount: finalAmount,
       status: normalizedStatus,
-      loyalty: loyaltyResult
+      loyalty: loyaltyResult,
+      reward_voucher: rewardVoucherRecord
+        ? {
+            code: rewardVoucherRecord.voucher_code,
+            title: rewardVoucherRecord.voucher_title,
+            discount_percent: Number(rewardVoucherRecord.discount_percent || 0),
+            discount_amount: discountAmount
+          }
+        : null
     });
   } catch (error) {
     if (conn) {
@@ -941,27 +1155,54 @@ const markOrderPaid = async (req, res) => {
     return res.status(400).json({ message: 'order id không hợp lệ' });
   }
 
+  let conn;
   try {
-    const [rows] = await db.query(
+    conn = await db.getConnection();
+    await conn.beginTransaction();
+
+    const [rows] = await conn.query(
       `
-        SELECT order_id, status, payment_method, final_amount
+        SELECT order_id, status, payment_method, final_amount, reward_voucher_id, reward_points_spent, reward_points_deducted, reward_voucher_code
         FROM orders
         WHERE order_id = ?
         LIMIT 1
+        FOR UPDATE
       `,
       [orderId]
     );
 
     if (!rows.length) {
+      await conn.rollback();
       return res.status(404).json({ message: 'Không tìm thấy đơn hàng' });
     }
 
     const order = rows[0];
     if (String(order.status) !== 'pending') {
+      await conn.rollback();
       return res.status(400).json({ message: 'Chỉ xác nhận được đơn hàng đang chờ thanh toán' });
     }
 
-    await db.query(
+    // If there is a reward voucher associated that requires point deduction upon payment, process it now
+    if (order.reward_voucher_id && Number(order.reward_points_spent || 0) > 0 && Number(order.reward_points_deducted || 0) === 0) {
+      const [rvRows] = await conn.query(
+        `SELECT reward_voucher_id, customer_id, points_spent, status FROM customer_reward_vouchers WHERE reward_voucher_id = ? FOR UPDATE`,
+        [Number(order.reward_voucher_id)]
+      );
+
+      if (rvRows.length) {
+        const rv = rvRows[0];
+        if (String(rv.status) !== 'used') {
+          // deduct points from customer
+          await conn.query('UPDATE customers SET points = points - ? WHERE customer_id = ?', [Number(rv.points_spent || order.reward_points_spent), rv.customer_id]);
+          // mark voucher used
+          await conn.query("UPDATE customer_reward_vouchers SET status = 'used' WHERE reward_voucher_id = ?", [Number(rv.reward_voucher_id)]);
+        }
+        // mark order as having deducted points
+        await conn.query('UPDATE orders SET reward_points_deducted = 1 WHERE order_id = ?', [orderId]);
+      }
+    }
+
+    await conn.query(
       `
         UPDATE orders
         SET status = 'paid'
@@ -970,6 +1211,8 @@ const markOrderPaid = async (req, res) => {
       [orderId]
     );
 
+    await conn.commit();
+
     return res.json({
       order_id: orderId,
       status: 'paid',
@@ -977,8 +1220,13 @@ const markOrderPaid = async (req, res) => {
       final_amount: Number(order.final_amount || 0)
     });
   } catch (error) {
+    if (conn) {
+      try { await conn.rollback(); } catch (_) {}
+    }
     console.error('Lỗi xác nhận thanh toán đơn hàng:', error);
     return res.status(500).json({ message: 'Lỗi server', error: error.message });
+  } finally {
+    if (conn) conn.release();
   }
 };
 

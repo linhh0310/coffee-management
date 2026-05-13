@@ -357,7 +357,10 @@ function Sales() {
 
   const [customerMode, setCustomerMode] = useState('walk_in'); // walk_in | table
   const [useLoyalty, setUseLoyalty] = useState(false);
+  const [useRewardVoucher, setUseRewardVoucher] = useState(false);
+  const [voucherMode, setVoucherMode] = useState('apply_existing'); // apply_existing | redeem_points
   const [loyaltyPhone, setLoyaltyPhone] = useState('');
+  const [loyaltyLookup, setLoyaltyLookup] = useState({ loading: false, customer: null, reward_vouchers: [], redeem_rule: null, message: '' });
 
   const [cart, setCart] = useState(() => new Map()); // key -> { key, product, qty, options, unitPrice }
   const [submitting, setSubmitting] = useState(false);
@@ -450,6 +453,75 @@ function Sales() {
   const tax = useMemo(() => Math.round(subtotal * 0.1), [subtotal]);
   const total = useMemo(() => subtotal + tax, [subtotal, tax]);
   const isInvoiceLocked = Boolean(invoiceModal && String(invoiceModal?.status) === 'pending');
+
+  useEffect(() => {
+    const phone = String(loyaltyPhone || '').trim();
+    if (!phone) {
+      setLoyaltyLookup({ loading: false, customer: null, reward_vouchers: [], redeem_rule: null, message: '' });
+      setUseLoyalty(false);
+      setUseRewardVoucher(false);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        setLoyaltyLookup((prev) => ({ ...prev, loading: true, message: '' }));
+        const token = localStorage.getItem('token');
+        if (!token) {
+          handleLogout();
+          return;
+        }
+        const headers = { Authorization: `Bearer ${token}` };
+        const res = await axios.get('/api/customers/lookup', {
+          headers,
+          params: { phone }
+        });
+        setLoyaltyLookup({
+          loading: false,
+          customer: res.data?.customer || null,
+          reward_vouchers: Array.isArray(res.data?.reward_vouchers) ? res.data.reward_vouchers : [],
+          redeem_rule: res.data?.redeem_rule || null,
+          message: ''
+        });
+      } catch (err) {
+        setLoyaltyLookup({
+          loading: false,
+          customer: null,
+          reward_vouchers: [],
+          redeem_rule: null,
+          message: err?.response?.data?.message || 'Không tra cứu được khách hàng.'
+        });
+      }
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [loyaltyPhone, handleLogout]);
+
+  const fetchLookupNow = async (phone) => {
+    try {
+      setLoyaltyLookup((prev) => ({ ...prev, loading: true, message: '' }));
+      const token = localStorage.getItem('token');
+      if (!token) {
+        handleLogout();
+        return null;
+      }
+      const headers = { Authorization: `Bearer ${token}` };
+      const res = await axios.get('/api/customers/lookup', { headers, params: { phone } });
+      const payload = {
+        loading: false,
+        customer: res.data?.customer || null,
+        reward_vouchers: Array.isArray(res.data?.reward_vouchers) ? res.data.reward_vouchers : [],
+        redeem_rule: res.data?.redeem_rule || null,
+        message: ''
+      };
+      setLoyaltyLookup(payload);
+      return payload;
+    } catch (err) {
+      const payload = { loading: false, customer: null, reward_vouchers: [], redeem_rule: null, message: err?.response?.data?.message || 'Không tra cứu được khách hàng.' };
+      setLoyaltyLookup(payload);
+      return payload;
+    }
+  };
 
   const openProductModal = (product) => {
     if (isInvoiceLocked) {
@@ -611,9 +683,36 @@ function Sales() {
         };
       });
       if (useLoyalty && !String(loyaltyPhone || '').trim()) {
-        setErrorMessage('Vui lòng nhập số điện thoại tích điểm ở phần chi tiết đơn hàng.');
+        setErrorMessage('Vui lòng nhập số điện thoại khách hàng ở phần chi tiết đơn hàng.');
         setSubmitting(false);
         return null;
+      }
+
+      if (useRewardVoucher) {
+        if (!useLoyalty) {
+          setErrorMessage('Bạn cần chọn khách hàng tích điểm trước khi áp dụng voucher.');
+          setSubmitting(false);
+          return null;
+        }
+        if (subtotal < 50000) {
+          setErrorMessage('Voucher chỉ áp dụng cho hóa đơn từ 50.000đ trở lên.');
+          setSubmitting(false);
+          return null;
+        }
+
+        if (voucherMode === 'apply_existing') {
+          if (!(loyaltyLookup?.reward_vouchers || []).length) {
+            setErrorMessage('Khách hàng hiện không có voucher điểm khả dụng.');
+            setSubmitting(false);
+            return null;
+          }
+        } else if (voucherMode === 'redeem_points') {
+          if (!(loyaltyLookup?.redeem_rule?.eligible)) {
+            setErrorMessage(`Khách hàng không đủ điểm để đổi (cần ${loyaltyLookup?.redeem_rule?.required_points || 100}).`);
+            setSubmitting(false);
+            return null;
+          }
+        }
       }
 
       const normalizedPaymentMethod = selectedPaymentMethod === 'transfer' ? 'momo' : 'cash';
@@ -634,9 +733,14 @@ function Sales() {
           ? {
               use_points: true,
               phone: String(loyaltyPhone || '').trim(),
-              full_name: 'Khách POS'
+              full_name: loyaltyLookup?.customer?.full_name || 'Khách POS'
             }
-          : { use_points: false }
+          : { use_points: false },
+        reward_voucher: useRewardVoucher
+          ? (voucherMode === 'apply_existing' && loyaltyLookup?.reward_vouchers?.[0]
+              ? { apply: true, code: loyaltyLookup.reward_vouchers[0].code }
+              : { apply: true, redeem_points: true })
+          : { apply: false }
       };
 
       const res = await axios.post('/api/orders/checkout', body, { headers });
@@ -1087,27 +1191,74 @@ function Sales() {
                   </div>
                 </div>
 
-                <div className="mt-5 rounded-2xl border border-orange-100 bg-white p-3 space-y-3 text-left">
-                  <label className="flex items-center gap-3 select-none">
-                    <input
-                      type="checkbox"
-                      className="size-4 accent-[#b87414]"
-                      checked={useLoyalty}
-                      onChange={(e) => setUseLoyalty(e.target.checked)}
-                    />
-                    <span className="text-sm font-semibold text-slate-700">Tích điểm</span>
-                  </label>
-                  {useLoyalty && (
-                    <div>
-                      <label className="text-xs font-semibold text-slate-600">Số điện thoại tích điểm</label>
-                      <input
-                        className="mt-2 w-full border border-orange-100 rounded-xl px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-[#b87414]"
-                        placeholder="090..."
-                        value={loyaltyPhone}
-                        onChange={(e) => setLoyaltyPhone(e.target.value)}
-                      />
+                <div className="mt-3 rounded-2xl border border-orange-100 bg-white p-3 space-y-3 text-left">
+                  <label className="text-xs font-semibold text-slate-600">Số điện thoại khách hàng (nhập để hiện lựa chọn)</label>
+                  <input
+                    className="mt-2 w-full border border-orange-100 rounded-xl px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-[#b87414]"
+                    placeholder="090..."
+                    value={loyaltyPhone}
+                    onChange={(e) => setLoyaltyPhone(e.target.value)}
+                  />
+
+                  {String(loyaltyPhone || '').trim() ? (
+                    <div className="pt-2">
+                      <label className="flex items-center gap-3 select-none">
+                        <input
+                          type="checkbox"
+                          className="size-4 accent-[#b87414]"
+                          checked={useLoyalty}
+                          onChange={(e) => setUseLoyalty(e.target.checked)}
+                        />
+                        <span className="text-sm font-semibold text-slate-700">Tích điểm</span>
+                      </label>
+
+                      <label className="flex items-center gap-3 select-none mt-2">
+                        <input
+                          type="checkbox"
+                          className="size-4 accent-[#b87414]"
+                          checked={useRewardVoucher}
+                          onChange={async (e) => {
+                            const want = e.target.checked;
+                            if (want) {
+                              const phone = String(loyaltyPhone || '').trim();
+                              if (!phone) {
+                                toast.error('Vui lòng nhập số điện thoại trước khi áp voucher.');
+                                return;
+                              }
+                              // ensure we have latest lookup
+                              if (!loyaltyLookup.customer && !loyaltyLookup.loading) {
+                                await fetchLookupNow(phone);
+                              }
+                              if (loyaltyLookup.loading) {
+                                toast('Đang kiểm tra thông tin khách hàng...');
+                                return;
+                              }
+                              if (!loyaltyLookup.customer) {
+                                toast.error('Số điện thoại chưa có tài khoản thành viên.');
+                                return;
+                              }
+                              if (voucherMode === 'apply_existing') {
+                                if (!((loyaltyLookup?.reward_vouchers || []).length)) {
+                                  toast.error('Tài khoản không có voucher đổi điểm.');
+                                  return;
+                                }
+                              } else if (voucherMode === 'redeem_points') {
+                                if (!(loyaltyLookup?.redeem_rule?.eligible)) {
+                                  toast.error(`Tài khoản không đủ điểm (cần ${loyaltyLookup?.redeem_rule?.required_points || 100}).`);
+                                  return;
+                                }
+                              }
+                              setUseRewardVoucher(true);
+                              setUseLoyalty(true);
+                            } else {
+                              setUseRewardVoucher(false);
+                            }
+                          }}
+                        />
+                        <span className="text-sm font-semibold text-slate-700">Áp voucher đổi điểm</span>
+                      </label>
                     </div>
-                  )}
+                  ) : null}
                 </div>
 
                 <div className="mt-3 flex items-center gap-3">
@@ -1119,6 +1270,8 @@ function Sales() {
                     Hủy đơn
                   </button>
                 </div>
+
+                {/* voucher options are shown inline with phone input; removed duplicate block */}
 
                 <button
                   onClick={startCheckout}
