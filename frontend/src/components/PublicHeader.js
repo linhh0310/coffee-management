@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { resolveMediaUrl } from '../utils/media';
 
@@ -14,13 +14,12 @@ export default function PublicHeader({ sticky = false }) {
   const [openAccountMenu, setOpenAccountMenu] = useState(false);
   const customerToken = localStorage.getItem('customerToken');
 
-  const customerProfile = useMemo(() => {
-    try {
-      return JSON.parse(localStorage.getItem('customerProfile') || '{}');
-    } catch (_err) {
-      return {};
-    }
-  }, [customerToken]);
+  let customerProfile = {};
+  try {
+    customerProfile = JSON.parse(localStorage.getItem('customerProfile') || '{}');
+  } catch (_err) {
+    customerProfile = {};
+  }
 
   const handleCustomerLogout = () => {
     localStorage.removeItem('customerToken');
