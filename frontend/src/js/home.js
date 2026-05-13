@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import ChatWidget from '../components/ChatWidget';
-import { resolveMediaUrl } from '../utils/media';
+import PublicHeader from '../components/PublicHeader';
 
 const banners = [
   {
@@ -47,20 +47,10 @@ function tierProgress(points = 0) {
 }
 
 export default function Home() {
-  const navigate = useNavigate();
-  const customerToken = localStorage.getItem('customerToken');
-  const [openAccountMenu, setOpenAccountMenu] = useState(false);
 
   const [activeBanner, setActiveBanner] = useState(0);
   const [products, setProducts] = useState([]);
   const [productsLoading, setProductsLoading] = useState(true);
-  const [customerProfile, setCustomerProfile] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem('customerProfile') || '{}');
-    } catch (_err) {
-      return {};
-    }
-  });
   const [customerLookup, setCustomerLookup] = useState({ phone: '', loading: false, data: null, message: '' });
   const [scrollY, setScrollY] = useState(0);
 
@@ -142,85 +132,9 @@ export default function Home() {
   const progress = tierProgress(customerLookup.data?.points || 0);
   const percent = progress.next <= progress.current ? 100 : Math.round((progress.current / progress.next) * 100);
 
-  const handleCustomerLogout = () => {
-    localStorage.removeItem('customerToken');
-    localStorage.removeItem('customerProfile');
-    setCustomerProfile({});
-    setOpenAccountMenu(false);
-    navigate('/');
-  };
-
   return (
     <div className="customer-home min-h-screen bg-[#f7f2eb] text-[#2d1f16]">
-      <header className="sticky top-0 z-40 border-b border-[#e8dccf] bg-[#fffaf4]/95 backdrop-blur fx-fade-up">
-        <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3 md:flex-nowrap md:px-6 md:py-4">
-          <Link to="/" className="block w-[150px] shrink-0 sm:w-[190px] md:w-[220px]">
-            <div className="relative h-10 overflow-visible md:h-12">
-              <img
-                src={resolveMediaUrl('/uploads/logo/logo.png')}
-                alt="The Coffee"
-                className="absolute left-0 top-1/2 h-16 w-auto -translate-y-1/2 object-contain md:h-20"
-              />
-            </div>
-          </Link>
-          <nav className="order-3 flex w-full items-center gap-2 overflow-x-auto pb-1 text-xs font-semibold text-[#6b4d37] md:order-none md:w-auto md:gap-5 md:overflow-visible md:pb-0 md:text-sm">
-            <Link to="/story" className="shrink-0 rounded-full bg-white/70 px-3 py-2 hover:text-[#7a4a27] md:bg-transparent md:p-0">Câu chuyện</Link>
-            <Link to="/stores" className="shrink-0 rounded-full bg-white/70 px-3 py-2 hover:text-[#7a4a27] md:bg-transparent md:p-0">Cửa hàng</Link>
-            <Link to="/news" className="shrink-0 rounded-full bg-white/70 px-3 py-2 hover:text-[#7a4a27] md:bg-transparent md:p-0">Tin tức</Link>
-            <Link to="/account" className="shrink-0 rounded-full bg-white/70 px-3 py-2 hover:text-[#7a4a27] md:bg-transparent md:p-0">Tài khoản</Link>
-          </nav>
-          <div className="relative flex shrink-0 items-center gap-2 md:gap-3">
-            {!customerToken ? (
-              <>
-                <Link className="rounded-full border border-[#d5b899] px-3 py-2 text-xs font-semibold hover:bg-[#f7eadb] sm:px-4 sm:text-sm" to="/customer/login">
-                  Đăng nhập
-                </Link>
-                <Link className="rounded-full bg-[#7a4a27] px-3 py-2 text-xs font-semibold text-white hover:bg-[#5e3519] sm:px-4 sm:text-sm" to="/customer/register">
-                  Đăng ký
-                </Link>
-              </>
-            ) : (
-              <>
-                <button
-                  type="button"
-                  onClick={() => setOpenAccountMenu((v) => !v)}
-                  className="flex items-center gap-2 px-1 py-1"
-                >
-                  <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#e7ebf0] text-[#5a6168] text-xs font-semibold">
-                    {String(customerProfile?.full_name || customerProfile?.email || 'U').slice(0, 1).toUpperCase()}
-                  </span>
-                  <span className="text-[16px] font-medium text-[#303742] leading-none">
-                    {String(customerProfile?.full_name || 'Tài khoản').split(' ').slice(-2).join(' ')}
-                  </span>
-                  <span className="material-symbols-outlined text-[18px] text-[#6b7280]">expand_more</span>
-                </button>
-
-                {openAccountMenu && (
-                  <div className="fixed right-6 top-16 z-[9999] w-52 rounded-xl border border-[#eadfd4] bg-white shadow-lg overflow-hidden">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setOpenAccountMenu(false);
-                        navigate('/account');
-                      }}
-                      className="w-full text-left px-4 py-3 text-sm font-medium text-[#2f2117] hover:bg-[#faf5ef]"
-                    >
-                      Tài khoản của tôi
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleCustomerLogout}
-                      className="w-full text-left px-4 py-3 text-sm font-medium text-[#8b2b2b] hover:bg-[#fff1f1] border-t border-[#f2e5e5]"
-                    >
-                      Đăng xuất
-                    </button>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-      </header>
+      <PublicHeader sticky />
 
       <main>
         <section className="mx-auto w-full max-w-6xl px-4 pb-8 pt-6 md:px-6 md:pb-10 md:pt-12 fx-fade-up fx-fade-up-delay-1">
