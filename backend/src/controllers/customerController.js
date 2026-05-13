@@ -16,7 +16,15 @@ function normalizePhone(phone) {
 
 let authColumnsEnsured = false;
 let profileColumnsEnsured = false;
+let rewardVoucherTableEnsured = false;
 const resetOtpStore = new Map();
+
+const REDEEM_VOUCHER_RULE = {
+  requiredPoints: 100,
+  discountPercent: 10,
+  title: 'Voucher giảm 10%',
+  description: 'Đổi từ 100 điểm thành viên'
+};
 
 async function ensureCustomerAuthColumns() {
   if (authColumnsEnsured) return;
@@ -60,6 +68,29 @@ async function ensureCustomerProfileColumns() {
   profileColumnsEnsured = true;
 }
 
+async function ensureRewardVoucherTable() {
+  if (rewardVoucherTableEnsured) return;
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS customer_reward_vouchers (
+      reward_voucher_id INT AUTO_INCREMENT PRIMARY KEY,
+      customer_id INT NOT NULL,
+      voucher_code VARCHAR(64) NOT NULL UNIQUE,
+      voucher_title VARCHAR(255) NOT NULL,
+      discount_percent DECIMAL(5,2) NOT NULL DEFAULT 0,
+      points_spent INT NOT NULL DEFAULT 0,
+      status ENUM('active', 'used', 'expired') NOT NULL DEFAULT 'active',
+      expires_at DATETIME NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_reward_vouchers_customer (customer_id),
+      CONSTRAINT fk_reward_vouchers_customer FOREIGN KEY (customer_id) REFERENCES customers(customer_id) ON DELETE CASCADE
+    )
+  `);
+
+  rewardVoucherTableEnsured = true;
+}
+
 function maskPhone(phone) {
   const p = String(phone || '');
   if (p.length < 4) return '****';
@@ -68,6 +99,11 @@ function maskPhone(phone) {
 
 function buildOtp() {
   return String(Math.floor(100000 + Math.random() * 900000));
+}
+
+function buildRewardVoucherCode(customerId) {
+  const suffix = Math.random().toString(36).slice(2, 8).toUpperCase();
+  return `TV-${String(customerId).padStart(4, '0')}-${suffix}`;
 }
 
 exports.registerCustomer = async (req, res) => {
@@ -641,6 +677,8 @@ exports.getMyVouchers = async (req, res) => {
   if (!customerId) return res.status(401).json({ message: 'Token không hợp lệ' });
 
   try {
+    await ensureRewardVoucherTable();
+
     const [customerRows] = await db.query(
       'SELECT points, tier FROM customers WHERE customer_id = ? LIMIT 1',
       [customerId]
@@ -663,8 +701,18 @@ exports.getMyVouchers = async (req, res) => {
       `
     );
 
+    const [rewardRows] = await db.query(
+      `
+      SELECT voucher_code, voucher_title, discount_percent, points_spent, status, expires_at, created_at
+      FROM customer_reward_vouchers
+      WHERE customer_id = ?
+      ORDER BY created_at DESC
+      `,
+      [customerId]
+    );
+
     const now = new Date();
-    const vouchers = (promoRows || []).map((p) => {
+    const systemVouchers = (promoRows || []).map((p) => {
       const start = new Date(p.start_date);
       const end = new Date(p.end_date);
       const status = now < start ? 'upcoming' : now > end ? 'expired' : 'active';
@@ -678,16 +726,114 @@ exports.getMyVouchers = async (req, res) => {
         condition: `${baseCondition}. ${tierCondition}.`,
         expiry: end.toLocaleDateString('vi-VN'),
         discount_value: Number(p.discount_value || 0),
-        promo_type: p.promo_type
+        promo_type: p.promo_type,
+        source: 'promotion'
+      };
+    });
+
+    const rewardVouchers = (rewardRows || []).map((row) => {
+      const expiresAt = new Date(row.expires_at);
+      const computedStatus = row.status === 'used'
+        ? 'used'
+        : now > expiresAt
+          ? 'expired'
+          : 'active';
+
+      return {
+        code: row.voucher_code,
+        title: row.voucher_title,
+        status: computedStatus,
+        condition: `Đổi từ ${Number(row.points_spent || REDEEM_VOUCHER_RULE.requiredPoints)} điểm thành viên. Áp dụng giảm ${Number(row.discount_percent || REDEEM_VOUCHER_RULE.discountPercent)}% tại quầy cho 1 hóa đơn.`,
+        expiry: expiresAt.toLocaleDateString('vi-VN'),
+        discount_value: Number(row.discount_percent || 0),
+        promo_type: 'percent',
+        source: 'reward_points'
       };
     });
 
     return res.json({
       points,
       tier,
-      vouchers
+      redeem_rule: {
+        required_points: REDEEM_VOUCHER_RULE.requiredPoints,
+        discount_percent: REDEEM_VOUCHER_RULE.discountPercent,
+        eligible: points >= REDEEM_VOUCHER_RULE.requiredPoints
+      },
+      vouchers: [...rewardVouchers, ...systemVouchers]
     });
   } catch (error) {
     return res.status(500).json({ message: 'Lỗi lấy voucher', error: error.message });
+  }
+};
+
+exports.redeemPointsVoucher = async (req, res) => {
+  const customerId = Number(req.user?.id);
+  if (!customerId) return res.status(401).json({ message: 'Token không hợp lệ' });
+
+  const conn = await db.getConnection();
+  try {
+    await ensureRewardVoucherTable();
+    await conn.beginTransaction();
+
+    const [rows] = await conn.query(
+      'SELECT customer_id, points, tier, status FROM customers WHERE customer_id = ? LIMIT 1 FOR UPDATE',
+      [customerId]
+    );
+
+    if (!rows.length) {
+      await conn.rollback();
+      return res.status(404).json({ message: 'Không tìm thấy tài khoản khách hàng' });
+    }
+
+    const customer = rows[0];
+    if (Number(customer.status) !== 1) {
+      await conn.rollback();
+      return res.status(403).json({ message: 'Tài khoản thành viên đang tạm khóa' });
+    }
+
+    const currentPoints = Number(customer.points || 0);
+    if (currentPoints < REDEEM_VOUCHER_RULE.requiredPoints) {
+      await conn.rollback();
+      return res.status(400).json({ message: `Bạn cần ít nhất ${REDEEM_VOUCHER_RULE.requiredPoints} điểm để đổi voucher.` });
+    }
+
+    const nextPoints = currentPoints - REDEEM_VOUCHER_RULE.requiredPoints;
+    const nextTier = customer.tier || calcTier(nextPoints);
+    const voucherCode = buildRewardVoucherCode(customerId);
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+    await conn.query(
+      'UPDATE customers SET points = ?, tier = ? WHERE customer_id = ?',
+      [nextPoints, nextTier, customerId]
+    );
+
+    await conn.query(
+      `INSERT INTO customer_reward_vouchers (customer_id, voucher_code, voucher_title, discount_percent, points_spent, status, expires_at)
+       VALUES (?, ?, ?, ?, ?, 'active', ?)`,
+      [customerId, voucherCode, REDEEM_VOUCHER_RULE.title, REDEEM_VOUCHER_RULE.discountPercent, REDEEM_VOUCHER_RULE.requiredPoints, expiresAt]
+    );
+
+    await conn.commit();
+
+    return res.json({
+      message: `Đổi voucher thành công. Bạn đã nhận voucher giảm ${REDEEM_VOUCHER_RULE.discountPercent}% từ ${REDEEM_VOUCHER_RULE.requiredPoints} điểm.`,
+      points: nextPoints,
+      tier: nextTier,
+      voucher: {
+        code: voucherCode,
+        title: REDEEM_VOUCHER_RULE.title,
+        status: 'active',
+        condition: `Giảm ${REDEEM_VOUCHER_RULE.discountPercent}% cho 1 hóa đơn tại quầy.`,
+        expiry: expiresAt.toLocaleDateString('vi-VN'),
+        discount_value: REDEEM_VOUCHER_RULE.discountPercent,
+        promo_type: 'percent',
+        source: 'reward_points'
+      }
+    });
+  } catch (error) {
+    await conn.rollback();
+    return res.status(500).json({ message: 'Lỗi đổi điểm sang voucher', error: error.message });
+  } finally {
+    conn.release();
   }
 };

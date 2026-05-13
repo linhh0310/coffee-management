@@ -74,6 +74,8 @@ export default function Account() {
   const [feedback, setFeedback] = useState('');
   const [transactions, setTransactions] = useState([]);
   const [vouchers, setVouchers] = useState([]);
+  const [redeemRule, setRedeemRule] = useState({ required_points: 100, discount_percent: 10, eligible: false });
+  const [redeemingVoucher, setRedeemingVoucher] = useState(false);
   const [extraLoading, setExtraLoading] = useState(false);
   const [invoiceSearch, setInvoiceSearch] = useState('');
   const [invoiceStatus, setInvoiceStatus] = useState('');
@@ -257,6 +259,7 @@ export default function Account() {
         if (!mounted) return;
         setTransactions(Array.isArray(txRes.data?.transactions) ? txRes.data.transactions : []);
         setVouchers(Array.isArray(voucherRes.data?.vouchers) ? voucherRes.data.vouchers : []);
+        setRedeemRule(voucherRes.data?.redeem_rule || { required_points: 100, discount_percent: 10, eligible: false });
       } catch (_err) {
         if (!mounted) return;
         setTransactions([]);
@@ -291,6 +294,40 @@ export default function Account() {
   const voucherRows = vouchers;
   const activeVouchers = useMemo(() => voucherRows.filter((v) => v.status === 'active'), [voucherRows]);
   const usedOrExpired = useMemo(() => voucherRows.filter((v) => v.status !== 'active'), [voucherRows]);
+
+  const handleRedeemVoucher = async () => {
+    if (!customerToken) {
+      setMessage('Vui lòng đăng nhập để đổi điểm.');
+      return;
+    }
+
+    try {
+      setRedeemingVoucher(true);
+      const res = await axios.post('/api/customers/me/redeem-voucher', {}, {
+        headers: { Authorization: `Bearer ${customerToken}` }
+      });
+
+      if (res.data?.voucher) {
+        setVouchers((prev) => [res.data.voucher, ...prev]);
+      }
+
+      setCustomer((prev) => prev ? {
+        ...prev,
+        points: Number(res.data?.points || 0),
+        tier: res.data?.tier || prev.tier
+      } : prev);
+
+      setRedeemRule((prev) => ({
+        ...prev,
+        eligible: Number(res.data?.points || 0) >= Number(prev.required_points || 100)
+      }));
+      notify(res.data?.message || 'Đổi voucher thành công.');
+    } catch (err) {
+      setMessage(err?.response?.data?.message || 'Không thể đổi điểm sang voucher lúc này.');
+    } finally {
+      setRedeemingVoucher(false);
+    }
+  };
 
   const tabs = [
     { id: 'profile', label: 'Thông tin cá nhân', icon: 'badge' },
@@ -455,6 +492,28 @@ export default function Account() {
                     <ul className="mt-3 list-disc space-y-2 pl-5 text-[14px] leading-[1.6] text-[#6f5a49]">
                       {tier.perks.map((perk) => <li key={perk}>{perk}</li>)}
                     </ul>
+                  </div>
+
+                  <div className="mt-5 rounded-[18px] border border-[#e8d6c3] bg-white p-4 shadow-sm">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                      <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#a07b61]">Đổi điểm thành voucher</p>
+                        <p className="mt-2 text-[18px] font-extrabold text-[#2f2117]">
+                          {redeemRule.required_points} điểm = voucher giảm {redeemRule.discount_percent}%
+                        </p>
+                        <p className="mt-2 text-[14px] leading-[1.6] text-[#6f5a49]">
+                          Khi đủ điểm, bạn có thể đổi sang voucher để sử dụng cho một hóa đơn tại quầy.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleRedeemVoucher}
+                        disabled={!redeemRule.eligible || redeemingVoucher || !customerToken}
+                        className="rounded-[14px] bg-[#ff5b1a] px-5 py-3 text-[14px] font-extrabold text-white shadow-[0_10px_20px_rgba(255,91,26,0.22)] transition hover:bg-[#ea4f0f] disabled:cursor-not-allowed disabled:bg-[#efc9b5] disabled:shadow-none"
+                      >
+                        {redeemingVoucher ? 'Đang đổi...' : redeemRule.eligible ? 'Đổi voucher ngay' : `Cần thêm ${Math.max(0, Number(redeemRule.required_points || 100) - Number(points || 0))} điểm`}
+                      </button>
+                    </div>
                   </div>
                 </div>
               </section>

@@ -16,6 +16,7 @@ router.get('/me', authMiddleware, customerAuthMiddleware, customerController.get
 router.patch('/me', authMiddleware, customerAuthMiddleware, customerController.updateMyCustomerProfile);
 router.get('/me/transactions', authMiddleware, customerAuthMiddleware, customerController.getMyTransactions);
 router.get('/me/vouchers', authMiddleware, customerAuthMiddleware, customerController.getMyVouchers);
+router.post('/me/redeem-voucher', authMiddleware, customerAuthMiddleware, customerController.redeemPointsVoucher);
 
 router.get('/', authMiddleware, customerController.getCustomers);
 router.post('/', authMiddleware, customerController.createCustomer);
