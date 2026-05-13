@@ -358,7 +358,7 @@ function Sales() {
   const [customerMode, setCustomerMode] = useState('walk_in'); // walk_in | table
   const [useLoyalty, setUseLoyalty] = useState(false);
   const [useRewardVoucher, setUseRewardVoucher] = useState(false);
-  const [voucherMode, setVoucherMode] = useState('apply_existing'); // apply_existing | redeem_points
+  const [voucherMode] = useState('apply_existing'); // apply_existing | redeem_points
   const [loyaltyPhone, setLoyaltyPhone] = useState('');
   const [loyaltyLookup, setLoyaltyLookup] = useState({ loading: false, customer: null, reward_vouchers: [], redeem_rule: null, message: '' });
 
